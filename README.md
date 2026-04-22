@@ -31,20 +31,6 @@ package.json
 npm install
 ```
 
-2. Variables de entorno:
-
-- Backend:
-
-```bash
-copy apps\\backend\\.env.example apps\\backend\\.env
-```
-
-- Frontend:
-
-```bash
-copy apps\\frontend\\.env.example apps\\frontend\\.env.local
-```
-
 3. Levanta servicios de infraestructura:
 
 ```bash
