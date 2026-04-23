@@ -1,26 +1,43 @@
 version: '3.9'
+
 services:
-  postgres:
-    image: postgres:16-alpine
-    container_name: proyecto11_postgres
+  # CAMBIO: Usamos TimescaleDB en lugar de Postgres puro
+  database:
+    image: timescale/timescaledb:latest-pg16
+    container_name: proyecto11_timescale
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: proyecto11
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
+      - POSTGRES_DB=${DB_NAME:-proyecto11}
     ports:
       - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - p11_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d proyecto11"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
-  redis:
+  # Redis para la ingesta masiva y alta concurrencia
+  cache:
     image: redis:7-alpine
     container_name: proyecto11_redis
     restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
     ports:
       - '6379:6379'
     volumes:
       - redis_data:/data
+    networks:
+      - p11_network
+
+networks:
+  p11_network:
+    driver: bridge
 
 volumes:
   postgres_data:

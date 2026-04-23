@@ -1,9 +1,40 @@
+# Dependencias
 node_modules/
 apps/*/node_modules/
+
+# Compilación y Salidas
+dist/
 apps/*/dist/
 apps/frontend/.next/
+apps/frontend/out/
+build/
+
+# Variables de Entorno (SEGURIDAD CRÍTICA)
 .env
 .env.local
+.env.production
 apps/backend/.env
 apps/frontend/.env.local
+
+# Logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Sistema y Editores
+.DS_Store
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Testing
+coverage/
+.nyc_output
+
+# Docker (Opcional: ignorar si no quieres persistir datos locales fuera de volúmenes)
+# .docker/
