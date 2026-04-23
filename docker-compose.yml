@@ -1,7 +1,7 @@
 version: '3.9'
 
 services:
-  # CAMBIO: Usamos TimescaleDB en lugar de Postgres puro
+  # TimescaleDB: extensión de series temporales sobre PostgreSQL 16
   database:
     image: timescale/timescaledb:latest-pg16
     container_name: proyecto11_timescale
@@ -14,10 +14,12 @@ services:
       - '5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # Script ejecutado automáticamente en la primera creación del contenedor
+      - ./docker/init:/docker-entrypoint-initdb.d:ro
     networks:
       - p11_network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d proyecto11"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-proyecto11}"]
       interval: 5s
       timeout: 5s
       retries: 5
