@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class CreateCatalogTables01 implements MigrationInterface {
-  name = 'CreateCatalogTables01';
+export class CreateCatalogTables1745634001000 implements MigrationInterface {
+  name = 'CreateCatalogTables1745634001000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // SISTEMAS

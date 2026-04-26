@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class CreateEscalationRules03 implements MigrationInterface {
-  name = 'CreateEscalationRules03';
+export class CreateEscalationRules1745634003000 implements MigrationInterface {
+  name = 'CreateEscalationRules1745634003000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`

@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class CreateAuditAndSupportTables06 implements MigrationInterface {
-  name = 'CreateAuditAndSupportTables06';
+export class CreateAuditAndSupportTables1745634006000 implements MigrationInterface {
+  name = 'CreateAuditAndSupportTables1745634006000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     // AUDITORIA

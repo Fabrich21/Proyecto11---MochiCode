@@ -9,10 +9,10 @@
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "migration:run": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:run -d src/database/data-source.ts",
-    "migration:revert": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:revert -d src/database/data-source.ts",
-    "migration:generate": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:generate -d src/database/data-source.ts",
-    "migration:create": "ts-node -r tsconfig-paths/register ./node_modules/typeorm/cli.js migration:create"
+    "migration:run": "npm run migration:run --prefix ../..",
+    "migration:revert": "npm run migration:revert --prefix ../..",
+    "migration:generate": "npm run migration:generate --prefix ../..",
+    "migration:create": "npm run migration:create --prefix ../.."
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",

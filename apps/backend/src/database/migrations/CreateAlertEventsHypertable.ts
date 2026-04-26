@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class CreateAlertEventsHypertable05 implements MigrationInterface {
-  name = 'CreateAlertEventsHypertable05';
+export class CreateAlertEventsHypertable1745634005000 implements MigrationInterface {
+  name = 'CreateAlertEventsHypertable1745634005000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`

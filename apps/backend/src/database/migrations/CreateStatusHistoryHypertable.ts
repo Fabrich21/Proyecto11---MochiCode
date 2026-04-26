@@ -1,7 +1,7 @@
 import { MigrationInterface, QueryRunner } from 'typeorm';
 
-export class CreateStatusHistoryHypertable04 implements MigrationInterface {
-  name = 'CreateStatusHistoryHypertable04';
+export class CreateStatusHistoryHypertable1745634004000 implements MigrationInterface {
+  name = 'CreateStatusHistoryHypertable1745634004000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`
