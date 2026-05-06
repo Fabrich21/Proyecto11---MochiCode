@@ -144,3 +144,35 @@ erDiagram
     INCIDENTES ||--o{ EVIDENCIAS : "respalda"
     INCIDENTES ||--o{ ACCIONES_PLAYBOOK : "ejecuta"
 ```
+
+
+## 📡 Integración de Sistemas (API de Ingesta)
+
+El sistema utiliza Redis para encolar alertas masivas de forma asíncrona, protegiendo la base de datos principal. Los sistemas externos (P1, P2, P8, etc.) deben utilizar este endpoint para reportar incidentes.
+
+**Endpoint:** `POST /api/ingestion/alertas`
+**Content-Type:** `application/json`
+
+### Estructura del Payload (Request)
+El sistema emisor debe enviar un JSON con la siguiente estructura estricta:
+
+```json
+{
+  "sistema_id": "P8", 
+  "payload": {
+    "sensor_id": "termometro-bodega-norte",
+    "temperatura": 85.5,
+    "estado": "critico"
+    // Cualquier dato adicional estructurado (JSON válido)
+  }
+}
+```
+Nota: Cualquier campo fuera de sistema_id y payload en el nivel raíz será rechazado automáticamente por el servidor (Error 400).
+
+Respuestas Esperadas
+
+✅ 202 Accepted: La alerta fue recibida y encolada exitosamente.
+
+❌ 400 Bad Request: Faltan campos obligatorios o se enviaron campos no permitidos.
+
+❌ 500 Internal Server Error: Falla en la infraestructura de encolado (Redis inactivo).

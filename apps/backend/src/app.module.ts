@@ -1,12 +1,16 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { BullModule } from '@nestjs/bullmq';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
+import { IngestionModule } from './ingestion/ingestion.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    
+    // Conexión a Base de Datos (PostgreSQL + TimescaleDB)
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
@@ -20,6 +24,20 @@ import { AppService } from './app.service';
         synchronize: false,
       }),
     }),
+
+    // Conexión Global a Cola de Mensajes (Redis)
+    BullModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => ({
+        connection: {
+          host: configService.get<string>('REDIS_HOST', 'localhost'),
+          port: configService.get<number>('REDIS_PORT', 6379),
+        },
+      }),
+    }),
+
+    // --- MÓDULOS DEL DOMINIO ---
+    IngestionModule, // <-- Faltaba agregarlo aquí
   ],
   controllers: [AppController],
   providers: [AppService],
