@@ -37,7 +37,7 @@ import { IngestionModule } from './ingestion/ingestion.module';
     }),
 
     // --- MÓDULOS DEL DOMINIO ---
-    IngestionModule, // <-- Faltaba agregarlo aquí
+    IngestionModule,
   ],
   controllers: [AppController],
   providers: [AppService],
