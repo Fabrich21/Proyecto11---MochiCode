@@ -41,7 +41,7 @@ import { IncidentesModule } from './incidentes/incidentes.module'; // <-- Nueva 
     // --- MÓDULOS DEL DOMINIO ---
     IngestionModule,  // Capa de entrada: recibe alertas y las encola en Redis
     WorkerModule,     // Capa de procesamiento: desencola desde Redis y persiste en PostgreSQL
-    IncidentesModule, // Capa de lectura: API para el frontend (Filtros y Paginación)
+    IncidentesModule, // <-- Capa de lectura: API para el frontend (Filtros y Paginación)
   ],
   controllers: [AppController],
   providers: [AppService],
