@@ -5,6 +5,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { IngestionModule } from './ingestion/ingestion.module';
+import { WorkerModule } from './worker/worker.module';
 
 @Module({
   imports: [
@@ -37,7 +38,8 @@ import { IngestionModule } from './ingestion/ingestion.module';
     }),
 
     // --- MÓDULOS DEL DOMINIO ---
-    IngestionModule, // <-- Faltaba agregarlo aquí
+    IngestionModule, // Capa de entrada: recibe alertas y las encola en Redis
+    WorkerModule,    // Capa de procesamiento: desencola desde Redis y persiste en PostgreSQL
   ],
   controllers: [AppController],
   providers: [AppService],

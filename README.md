@@ -176,3 +176,44 @@ Respuestas Esperadas
 ❌ 400 Bad Request: Faltan campos obligatorios o se enviaron campos no permitidos.
 
 ❌ 500 Internal Server Error: Falla en la infraestructura de encolado (Redis inactivo).
+
+---
+
+## ⚙️ Worker de Procesamiento Asíncrono
+
+Una vez que la alerta es encolada en Redis, el **Worker** la desencola automáticamente y la persiste en PostgreSQL. Este componente corre dentro del mismo proceso NestJS como un consumidor BullMQ.
+
+### Flujo completo
+
+```
+POST /ingestion/alertas
+  → ZeroTrustGuard valida x-api-key
+    → IngestionService encola job en Redis (alertas-queue)
+      → AlertasProcessor desencola automáticamente
+        → WorkerService.procesarAlerta()
+          → Transacción: INSERT incidente + INSERT evento_alerta en PostgreSQL
+```
+
+### Archivos del Worker
+
+| Archivo | Responsabilidad |
+|---|---|
+| `src/worker/worker.processor.ts` | Consumidor BullMQ — escucha `alertas-queue` y recibe cada job |
+| `src/worker/worker.service.ts` | Lógica de negocio — valida datos y ejecuta la transacción en PostgreSQL |
+| `src/worker/worker.module.ts` | Módulo NestJS — registra la cola, entidades y proveedores |
+| `src/database/entities/sistema.entity.ts` | Entidad TypeORM para la tabla `sistemas` |
+| `src/database/entities/politica-sla.entity.ts` | Entidad TypeORM para la tabla `politicas_sla` |
+| `src/database/entities/incidente.entity.ts` | Entidad TypeORM para la tabla `incidentes` |
+
+### Pasos internos de `WorkerService.procesarAlerta()`
+
+1. **Validar sistema** — Busca el `sistema_id` en la tabla `sistemas`. Si no existe, lanza un error y BullMQ reintenta el job (máx. 3 veces).
+2. **Buscar política SLA** — Obtiene la política SLA por defecto (la de menor tiempo de resolución).
+3. **Transacción atómica** — Abre un `QueryRunner` y ejecuta en una sola transacción:
+   - `INSERT` en `incidentes` vía repositorio TypeORM (título generado automáticamente como `[P1] Alerta automática — {timestamp}`)
+   - `INSERT` en `eventos_alerta` vía **SQL raw** (requerido por el hypertable de TimescaleDB con clave primaria compuesta `id + creado_en`)
+4. **Rollback automático** — Si cualquier INSERT falla, ambas operaciones se revierten y el error se relanza para que BullMQ reintente.
+
+### Nota sobre `creador_usuario_id`
+
+Los incidentes generados automáticamente usan el UUID centinela `00000000-0000-0000-0000-000000000001` como actor sistema. Este valor debe ser reemplazado por el `JWT.sub` de P12 cuando la integración de autenticación esté completa.
