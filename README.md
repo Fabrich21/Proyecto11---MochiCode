@@ -145,15 +145,31 @@ erDiagram
     INCIDENTES ||--o{ ACCIONES_PLAYBOOK : "ejecuta"
 ```
 
+## 📚 Referencia de la API
 
-## 📡 Integración de Sistemas (API de Ingesta)
+Todas las peticiones deben dirigirse a la ruta base `/api` (ej. `http://localhost:3001/api`).
 
-El sistema utiliza Redis para encolar alertas masivas de forma asíncrona, protegiendo la base de datos principal. Los sistemas externos (P1, P2, P8, etc.) deben utilizar este endpoint para reportar incidentes.
+### 1. Operaciones (DevOps / Infraestructura)
+Verifica el estado de salud del backend y sus conexiones internas. Ideal para los *Healthchecks* de Docker.
 
-**Endpoint:** `POST /api/ingestion/alertas`
-**Content-Type:** `application/json`
+**Endpoint:** `GET /health`
 
-### Estructura del Payload (Request)
+**Respuestas Esperadas:**
+- ✅ **200 OK:** El sistema está operativo y conectado a la BD/Redis.
+- ❌ **503 Service Unavailable:** Falla en la conexión a la infraestructura subyacente.
+
+---
+
+### 2. Ingesta (Sistemas Externos: P1, P2, P8)
+El sistema utiliza Redis para encolar alertas masivas de forma asíncrona, protegiendo la base de datos principal. Los sistemas externos deben utilizar este endpoint para reportar incidentes.
+
+**Endpoint:** `POST /ingestion/alertas`
+
+**Headers Requeridos:**
+- `Content-Type: application/json`
+- `x-api-key: <LLAVE_SECRETA_DEL_SISTEMA>` *(ZeroTrustGuard validará estrictamente que la llave corresponda al sistema emisor).*
+
+#### Estructura del Payload (Request)
 El sistema emisor debe enviar un JSON con la siguiente estructura estricta:
 
 ```json
@@ -167,17 +183,56 @@ El sistema emisor debe enviar un JSON con la siguiente estructura estricta:
   }
 }
 ```
-Nota: Cualquier campo fuera de sistema_id y payload en el nivel raíz será rechazado automáticamente por el servidor (Error 400).
+*Nota: Cualquier campo fuera de `sistema_id` y `payload` en el nivel raíz será rechazado automáticamente por el servidor (Error 400).*
 
-Respuestas Esperadas
-
-✅ 202 Accepted: La alerta fue recibida y encolada exitosamente.
-
-❌ 400 Bad Request: Faltan campos obligatorios o se enviaron campos no permitidos.
-
-❌ 500 Internal Server Error: Falla en la infraestructura de encolado (Redis inactivo).
+**Respuestas Esperadas:**
+- ✅ **202 Accepted:** La alerta fue recibida y encolada exitosamente.
+- ❌ **400 Bad Request:** Faltan campos obligatorios o se enviaron campos no permitidos.
+- ❌ **401 Unauthorized:** No se proporcionó API Key o las credenciales no coinciden con el `sistema_id`.
+- ❌ **500 Internal Server Error:** Falla en la infraestructura de encolado (Redis inactivo).
 
 ---
+
+### 3. Incidentes (Frontend UI)
+Obtiene la lista de incidentes persistidos en PostgreSQL. Este endpoint retorna meta-información matemática para facilitar la renderización de tablas y la paginación en la interfaz de usuario.
+
+**Endpoint:** `GET /incidentes`
+
+#### Parámetros de Consulta (Query Params - Opcionales)
+| Parámetro | Tipo | Default | Descripción |
+| :--- | :--- | :--- | :--- |
+| `page` | `number` | `1` | Página actual de resultados. |
+| `limit` | `number` | `10` | Cantidad de registros por página. |
+| `estado` | `string` | `null` | Filtrar por estado (`ABIERTO`, `EN_PROGRESO`, `CERRADO`). |
+| `sistema_id` | `string` | `null` | Filtrar por el sistema de origen (ej. `P8`, `P1`). |
+| `orden` | `string` | `DESC` | Ordenamiento por fecha de creación (`ASC` o `DESC`). |
+
+#### Ejemplo de Petición
+`GET /incidentes?page=1&limit=5&estado=ABIERTO&orden=DESC`
+
+#### Respuesta Exitosa (200 OK)
+```json
+{
+  "data": [
+    {
+      "id": "e8a2a0a2-2b3a-4a6c-9b1b-7c1a8e1a9b2b",
+      "titulo": "[P8] Alerta automática — 2026-05-26T20:33:29.839Z",
+      "descripcion": "Payload inicial: {\"sensor_id\":\"termometro-bodega-norte\",\"temperatura\":95.5}",
+      "estado": "ABIERTO",
+      "sistemaId": "P8",
+      "creadorUsuarioId": "00000000-0000-0000-0000-000000000001",
+      "politicaSlaId": "11111111-1111-1111-1111-111111111111",
+      "creadoEn": "2026-05-26T20:33:29.834Z"
+    }
+  ],
+  "meta": {
+    "total_registros": 42,
+    "pagina_actual": 1,
+    "total_paginas": 9,
+    "registros_por_pagina": 5
+  }
+}
+```
 
 ## ⚙️ Worker de Procesamiento Asíncrono
 
