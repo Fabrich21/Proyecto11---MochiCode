@@ -31,10 +31,16 @@ package.json
 npm install
 ```
 
-3. Levanta servicios de infraestructura:
+3. Levanta servicios de infraestructura (Base de datos y Redis):
 
 ```bash
 docker compose up -d
+```
+
+4. Ejecuta las migraciones para crear las tablas en la base de datos:
+
+```bash
+npm run migration:run
 ```
 
 ## Desarrollo
@@ -63,42 +69,45 @@ npm run build
 ```mermaid
 erDiagram
     SISTEMAS {
-        string sistema_id PK "Ej: P1, P2, P8"
-        string nombre
-        string descripcion
+        varchar sistema_id PK "Ej: P1, P2, P8"
+        varchar nombre
+        varchar descripcion
     }
 
     POLITICAS_SLA {
         uuid id PK
-        string nombre
+        varchar nombre
         int tiempo_maximo_resolucion_minutos
     }
 
     INCIDENTES {
         uuid id PK
-        string titulo
-        string descripcion
-        string estado "ABIERTO, EN_PROGRESO, CERRADO"
-        string sistema_id FK
-        uuid creador_usuario_id "Referencia a P12"
+        varchar titulo
+        varchar descripcion
+        varchar estado "ABIERTO, EN_PROGRESO, CERRADO"
+        varchar sistema_id FK
+        uuid creador_usuario_id "Referencia a P12 (Identidad)"
         uuid politica_sla_id FK
         datetime creado_en
+        uuid asignado_a_usuario_id "Referencia a P12 (Identidad), opcional"
+        varchar prioridad "BAJA, MEDIA, ALTA, CRITICA"
+        datetime fecha_resolucion "Opcional"
     }
 
     EVENTOS_ALERTA {
         uuid id PK
         datetime creado_en "Clave para TimescaleDB"
         jsonb payload
-        string sistema_id FK
-        uuid incidente_id FK "Opcional"
+        varchar sistema_id FK
+        uuid incidente_id FK "Opcional, agrupa alertas"
     }
 
     HISTORIAL_ESTADOS {
         uuid id PK
         uuid incidente_id FK
-        string estado_anterior
-        string estado_nuevo
-        uuid cambiado_por_usuario_id "Referencia a P12"
+        varchar estado_anterior
+        varchar estado_nuevo
+        uuid cambiado_por_usuario_id "Referencia a P12 (Identidad)"
         datetime cambiado_en
     }
 
@@ -106,43 +115,44 @@ erDiagram
         uuid id PK
         uuid politica_sla_id FK
         int tiempo_activacion_minutos
-        uuid notificar_a_usuario_id "Referencia a P12"
+        uuid notificar_a_usuario_id "Referencia a P12 (Identidad)"
     }
 
     AUDITORIA {
         uuid id PK
         uuid incidente_id FK
-        uuid accion_por_usuario_id "Referencia a P12"
-        string descripcion_accion
+        uuid accion_por_usuario_id "Referencia a P12 (Identidad)"
+        varchar descripcion_accion
         datetime creado_en
     }
 
     EVIDENCIAS {
         uuid id PK
         uuid incidente_id FK
-        string url_archivo
-        string descripcion
+        varchar url_archivo
+        varchar descripcion
         datetime subido_en
     }
 
     ACCIONES_PLAYBOOK {
         uuid id PK
         uuid incidente_id FK
-        string tipo_accion
-        uuid ejecutado_por_usuario_id "Referencia a P12"
+        varchar tipo_accion
+        uuid ejecutado_por_usuario_id "Referencia a P12 (Identidad)"
         datetime ejecutado_en
     }
 
     %% Relaciones
     SISTEMAS ||--o{ INCIDENTES : "genera"
     POLITICAS_SLA ||--o{ INCIDENTES : "aplica a"
+    SISTEMAS ||--o{ EVENTOS_ALERTA : "emite"
+    INCIDENTES ||--o{ EVENTOS_ALERTA : "agrupa"
     INCIDENTES ||--o{ HISTORIAL_ESTADOS : "registra"
     POLITICAS_SLA ||--o{ REGLAS_ESCALAMIENTO : "define"
-    INCIDENTES ||--o{ EVENTOS_ALERTA : "agrupa"
-    SISTEMAS ||--o{ EVENTOS_ALERTA : "emite"
     INCIDENTES ||--o{ AUDITORIA : "audita"
     INCIDENTES ||--o{ EVIDENCIAS : "respalda"
     INCIDENTES ||--o{ ACCIONES_PLAYBOOK : "ejecuta"
+
 ```
 
 
@@ -217,3 +227,113 @@ POST /ingestion/alertas
 ### Nota sobre `creador_usuario_id`
 
 Los incidentes generados automáticamente usan el UUID centinela `00000000-0000-0000-0000-000000000001` como actor sistema. Este valor debe ser reemplazado por el `JWT.sub` de P12 cuando la integración de autenticación esté completa.
+
+Aquí tienes el diseño de los endpoints formateado en Markdown, listo para que lo copies y pegues directamente en tu archivo `README.md`:
+
+## 🔌 Arquitectura de Integración (API RESTful)
+
+La Plataforma de Gestión de Incidentes Operacionales (Proyecto 11) actúa como un embudo central de información y un distribuidor de acciones. A continuación se detallan los endpoints expuestos (para recibir datos) y los consumidos (para enviar datos).
+
+---
+
+### 📥 1. Endpoints Expuestos (Nuestra API)
+Estos son los puertos de entrada de nuestra plataforma. Los proyectos que son nuestras **Dependencias** (P01, P02, P03, P04, P05, P07, P08, P12) consumirán estos endpoints para reportar anomalías.
+
+#### A. Ingesta de Alertas de los Sistemas
+* **Endpoint:** `POST /api/v1/alertas`
+* **Consumidor:** Sistemas de IoT (P08), Pasarela de Pagos (P04), Logística (P02), etc.
+* **Descripción:** Inserta un registro de alerta temporal (Timeseries) para ser evaluado y potencialmente agrupado en un incidente.
+* **Payload esperado (JSON):**
+```json
+  {
+    "sistema_id": "P8", 
+    "creado_en": "2026-05-26T15:30:00Z",
+    "payload": {
+      "sensor_id": "TEMP-001",
+      "error": "Temperatura fuera de rango",
+      "valor_actual": 8.5
+    }
+  }
+
+```
+
+#### B. Creación Manual / Escalamiento de Incidentes
+
+* **Endpoint:** `POST /api/v1/incidentes`
+* **Consumidor:** CRM (P07) o Frontend P11.
+* **Descripción:** Crea un incidente formal, asigna una política de SLA y registra el evento en la tabla de auditoría.
+* **Payload esperado (JSON):**
+
+```json
+  {
+    "titulo": "Caída masiva pasarela de pagos",
+    "descripcion": "Transacciones rechazadas con error 500",
+    "sistema_id": "P4",
+    "creador_usuario_id": "uuid-del-operador",
+    "politica_sla_id": "uuid-sla-critico"
+  }
+
+```
+
+#### C. Actualización de Estados
+
+* **Endpoint:** `PATCH /api/v1/incidentes/{id}/estado`
+* **Consumidor:** Frontend P11.
+* **Descripción:** Actualiza el estado de un incidente (Ej. ABIERTO -> EN_PROGRESO) y genera un registro en el historial de estados.
+* **Payload esperado (JSON):**
+
+```json
+  {
+    "estado_nuevo": "EN_PROGRESO",
+    "cambiado_por_usuario_id": "uuid-del-operador"
+  }
+
+```
+
+#### D. Extracción de Datos para Analítica (Pull)
+
+* **Endpoint:** `GET /api/v1/incidentes/metricas`
+* **Consumidor:** Analítica y BI (P09).
+* **Descripción:** Endpoint de consulta periódica para extraer historial de incidentes, SLAs cumplidos y tiempos medios de resolución (MTTR).
+
+---
+
+### 📤 2. Endpoints Consumidos (Servicios Externos)
+
+Estas son las peticiones que **nuestra plataforma (P11)** hará hacia los **Consumidores** externos cuando ocurran eventos que requieran su participación.
+
+#### A. Hacia Notificaciones Multicanal (P06)
+
+* **Endpoint Destino:** `POST /api/v1/notificaciones/enviar`
+* **Cuándo se llama:** Al crear un incidente crítico o al incumplir una regla de escalamiento por vencimiento de SLA.
+* **Payload enviado (JSON):**
+
+```json
+  {
+    "usuario_destino_id": "uuid-del-guardia",
+    "canal": "URGENTE_PUSH",
+    "mensaje": "SLA Vencido: Incidente P4 - Caída de Pagos requiere atención inmediata",
+    "incidente_id": "uuid-del-incidente"
+  }
+
+```
+
+#### B. Hacia Identidad y Accesos (P12)
+
+* **Endpoint Destino:** `GET /api/v1/usuarios/{uuid}`
+* **Cuándo se llama:** Para enriquecer la información visual del dashboard (obtener el nombre y rol del operador a partir de su UUID).
+
+#### C. Hacia Analítica y BI (P09) - Modo Push (Opcional)
+
+* **Endpoint Destino:** `POST /api/v1/ingesta/eventos-operacionales`
+* **Cuándo se llama:** Al momento de marcar un incidente como "CERRADO", enviando el resumen, causas y playbooks ejecutados para retroalimentación analítica.
+
+---
+
+### 🔄 Resumen del Flujo de Datos Operacional
+
+1. Los proyectos **(P01 al P08)** envían telemetría y errores a `/api/v1/alertas`.
+2. El **Proyecto 11** agrupa estas alertas en un `INCIDENTE`.
+3. El **Proyecto 11** solicita al **Proyecto 06** que notifique a los técnicos correspondientes.
+4. Los operadores (autenticados vía **Proyecto 12**) mitigan el problema y cierran el incidente.
+5. El **Proyecto 09** extrae la data histórica del incidente para calcular métricas de rendimiento y SLAs.

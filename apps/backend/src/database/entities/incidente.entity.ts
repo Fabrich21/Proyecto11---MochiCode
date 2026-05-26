@@ -64,6 +64,15 @@ export class Incidente {
   @CreateDateColumn({ name: 'creado_en', type: 'timestamptz' })
   creadoEn!: Date;
 
+  @Column({ name: 'asignado_a_usuario_id', type: 'uuid', nullable: true })
+  asignadoAUsuarioId?: string;
+
+  @Column({ type: 'varchar', length: 50, default: 'MEDIA' })
+  prioridad!: string;
+
+  @Column({ name: 'fecha_resolucion', type: 'timestamptz', nullable: true })
+  fechaResolucion?: Date;
+
   // Relaciones para joins opcionales (lazy loading desactivado por defecto)
   @ManyToOne(() => Sistema)
   @JoinColumn({ name: 'sistema_id' })
