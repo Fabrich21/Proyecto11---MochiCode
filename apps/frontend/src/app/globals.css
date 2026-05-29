@@ -18,19 +18,27 @@
 
 :root {
   color-scheme: light;
-  --background: #FFFFFF;
-  --primary: #3C6E71;
-  --foreground: #353535;
-  --secondary: #D9D9D9;
-  --accent: #284B63;
-  --border: #D9D9D9;
+  /* Palette */
+  --color-graphite: #353535; /* Graphite */
+  --color-stormy-teal: #3C6E71; /* Stormy Teal */
+  --color-white: #FFFFFF; /* White */
+  --color-alabaster-grey: #D9D9D9; /* Alabaster Grey */
+  --color-yale-blue: #284B63; /* Yale Blue */
+
+  /* Semantic tokens (mapped to palette) */
+  --background: var(--color-white);
+  --primary: var(--color-stormy-teal);
+  --foreground: var(--color-graphite);
+  --secondary: var(--color-alabaster-grey);
+  --accent: var(--color-yale-blue);
+  --border: var(--color-alabaster-grey);
   --input: #F5F5F5;
-  --muted: #D9D9D9;
-  --muted-foreground: #353535;
+  --muted: var(--color-alabaster-grey);
+  --muted-foreground: var(--color-graphite);
   --destructive: #E94B3C;
-  --success: #3C6E71;
+  --success: var(--color-stormy-teal);
   --warning: #F59E0B;
-  --info: #284B63;
+  --info: var(--color-yale-blue);
   --radius: 0.625rem;
 }
 
@@ -72,4 +80,33 @@ body {
 ::-moz-selection {
   background: #3C6E71;
   color: #FFFFFF;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: translateY(6px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in { animation: fadeIn 180ms cubic-bezier(.2,.9,.3,1) both; }
+.animate-scale-in { animation: scaleIn 220ms cubic-bezier(.2,.9,.3,1) both; }
+.animate-fade-up { animation: fadeUp 280ms cubic-bezier(.2,.9,.3,1) both; }
+
+/* Small utility for reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-scale-in,
+  .animate-fade-up {
+    animation: none !important;
+  }
 }

@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { Bell, Search, Filter, AlertTriangle, Plus } from 'lucide-react';
-import { IncidentCard, Incident } from './incident-card';
-import { ReportIncidentDialog, IncidentFormData } from './report-incident-dialog';
-import { cn } from '@/lib/utils';
+import { useState, useMemo, useEffect } from 'react';
+import { Search } from 'lucide-react';
+import { IncidentCard } from './incident-card';
+import { Incident } from './incident-types';
+import IncidentDetailModal from './incident-detail-modal';
 
 const mockIncidents: Incident[] = [
   {
@@ -16,6 +16,12 @@ const mockIncidents: Incident[] = [
     slaPercentage: 25,
     createdAt: new Date(Date.now() - 45 * 60000),
     affectedUsers: 2400,
+    affectedProject: 'pagos',
+    incidentStatus: 'abierto',
+    acknowledgedAt: null,
+    resolvedAt: null,
+    closedAt: null,
+    slaTargetMinutes: 60,
   },
   {
     id: 'INC-2024-0041',
@@ -26,6 +32,12 @@ const mockIncidents: Incident[] = [
     slaPercentage: 58,
     createdAt: new Date(Date.now() - 22 * 60000),
     affectedUsers: 8900,
+    affectedProject: 'logistica',
+    incidentStatus: 'en progreso',
+    acknowledgedAt: new Date(Date.now() - 20 * 60000),
+    resolvedAt: null,
+    closedAt: null,
+    slaTargetMinutes: 120,
   },
   {
     id: 'INC-2024-0040',
@@ -36,6 +48,12 @@ const mockIncidents: Incident[] = [
     slaPercentage: 67,
     createdAt: new Date(Date.now() - 13 * 60000),
     affectedUsers: 5200,
+    affectedProject: 'api-gateway',
+    incidentStatus: 'en progreso',
+    acknowledgedAt: new Date(Date.now() - 12 * 60000),
+    resolvedAt: null,
+    closedAt: null,
+    slaTargetMinutes: 90,
   },
   {
     id: 'INC-2024-0039',
@@ -46,50 +64,82 @@ const mockIncidents: Incident[] = [
     slaPercentage: 85,
     createdAt: new Date(Date.now() - 8 * 60000),
   },
+  {
+    id: 'INC-2024-0038',
+    severity: 'medium',
+    system: 'Salud',
+    description: 'Interrupción parcial en el servicio de consultas médicas.',
+    slaRemaining: 60,
+    slaPercentage: 40,
+    createdAt: new Date(Date.now() - 90 * 60000),
+    affectedUsers: 1200,
+    affectedProject: 'salud',
+    incidentStatus: 'resuelto',
+    acknowledgedAt: new Date(Date.now() - 85 * 60000),
+    resolvedAt: new Date(Date.now() - 30 * 60000),
+    closedAt: null,
+    slaTargetMinutes: 180,
+  },
 ];
 
 export function IncidentDashboard() {
-  const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSeverity, setSelectedSeverity] = useState<string | null>(null);
+  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [incidents, setIncidents] = useState<Incident[]>(mockIncidents);
 
+  useEffect(() => {
+    if (!selectedIncident) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setSelectedIncident(null);
+    };
+
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [selectedIncident]);
+
+  function updateIncident(updated: Incident) {
+    setIncidents((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
+    setSelectedIncident(updated);
+  }
+
+  function handleAcknowledge(incident: Incident) {
+    if (incident.acknowledgedAt) return;
+    updateIncident({ ...incident, acknowledgedAt: new Date(), incidentStatus: incident.incidentStatus === 'abierto' ? 'en progreso' : incident.incidentStatus });
+  }
+
+  function handleResolve(incident: Incident) {
+    if (incident.resolvedAt) return;
+    updateIncident({ ...incident, resolvedAt: new Date(), incidentStatus: 'resuelto' });
+  }
+
+  function handleCloseIncident(incident: Incident) {
+    if (incident.closedAt) return;
+    updateIncident({ ...incident, closedAt: new Date(), incidentStatus: 'cerrado' });
+  }
+
   const filteredIncidents = useMemo(() => {
-    return incidents.filter(incident => {
-      const matchesSearch =
-        incident.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        incident.system.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        incident.description.toLowerCase().includes(searchQuery.toLowerCase());
-
+    const q = searchQuery.trim().toLowerCase();
+    return incidents.filter((incident) => {
+      const matchesSearch = !q || [incident.id, incident.system, incident.description].some((s) => s.toLowerCase().includes(q));
       const matchesSeverity = !selectedSeverity || incident.severity === selectedSeverity;
-
       return matchesSearch && matchesSeverity;
     });
   }, [incidents, searchQuery, selectedSeverity]);
 
   const sortedIncidents = useMemo(() => {
-    const severityOrder = { critical: 0, high: 1, medium: 2 };
+    const severityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2 };
     return [...filteredIncidents].sort((a, b) => {
-      const severityDiff = severityOrder[a.severity as keyof typeof severityOrder] - severityOrder[b.severity as keyof typeof severityOrder];
-      if (severityDiff !== 0) return severityDiff;
-      return b.createdAt.getTime() - a.createdAt.getTime();
+      const sd = severityOrder[a.severity] - severityOrder[b.severity];
+      if (sd !== 0) return sd;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
   }, [filteredIncidents]);
-
-  const handleReportIncident = (formData: IncidentFormData) => {
-    const newIncident: Incident = {
-      id: `INC-2024-${String(incidents.length + 1).padStart(4, '0')}`,
-      severity: formData.severity,
-      system: formData.system,
-      description: formData.description,
-      slaRemaining: 60,
-      slaPercentage: 100,
-      createdAt: new Date(),
-      affectedUsers: 0,
-    };
-    setIncidents([newIncident, ...incidents]);
-    setIsReportDialogOpen(false);
-  };
 
   return (
     <div className="space-y-6">
@@ -117,14 +167,6 @@ export function IncidentDashboard() {
             <option value="high">Altos</option>
             <option value="medium">Medios</option>
           </select>
-
-          <button
-            onClick={() => setIsReportDialogOpen(true)}
-            className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 font-medium text-white transition-colors hover:bg-primary/90 shadow-sm"
-          >
-            <Plus className="h-4 w-4" />
-            Reportar Incidente
-          </button>
         </div>
       </div>
 
@@ -136,21 +178,15 @@ export function IncidentDashboard() {
         </div>
         <div className="rounded-lg border border-border bg-white p-5 shadow-sm hover:shadow-md transition">
           <p className="text-sm font-medium text-foreground/60">Críticos</p>
-          <p className="text-3xl font-bold text-destructive mt-2">
-            {incidents.filter(i => i.severity === 'critical').length}
-          </p>
+          <p className="text-3xl font-bold text-destructive mt-2">{incidents.filter((i) => i.severity === 'critical').length}</p>
         </div>
         <div className="rounded-lg border border-border bg-white p-5 shadow-sm hover:shadow-md transition">
           <p className="text-sm font-medium text-foreground/60">Altos</p>
-          <p className="text-3xl font-bold text-warning mt-2">
-            {incidents.filter(i => i.severity === 'high').length}
-          </p>
+          <p className="text-3xl font-bold text-warning mt-2">{incidents.filter((i) => i.severity === 'high').length}</p>
         </div>
         <div className="rounded-lg border border-border bg-white p-5 shadow-sm hover:shadow-md transition">
           <p className="text-sm font-medium text-foreground/60">Medios</p>
-          <p className="text-3xl font-bold text-info mt-2">
-            {incidents.filter(i => i.severity === 'medium').length}
-          </p>
+          <p className="text-3xl font-bold text-info mt-2">{incidents.filter((i) => i.severity === 'medium').length}</p>
         </div>
       </div>
 
@@ -159,8 +195,8 @@ export function IncidentDashboard() {
         <h2 className="text-lg font-bold text-foreground">Incidentes Activos</h2>
         <div className="space-y-3">
           {sortedIncidents.length > 0 ? (
-            sortedIncidents.map(incident => (
-              <IncidentCard key={incident.id} incident={incident} />
+            sortedIncidents.map((incident) => (
+              <IncidentCard key={incident.id} incident={incident} onClick={() => setSelectedIncident(incident)} />
             ))
           ) : (
             <div className="rounded-lg border border-border bg-white p-8 text-center shadow-sm">
@@ -170,12 +206,15 @@ export function IncidentDashboard() {
         </div>
       </div>
 
-      {/* Report Dialog */}
-      <ReportIncidentDialog
-        isOpen={isReportDialogOpen}
-        onClose={() => setIsReportDialogOpen(false)}
-        onSubmit={handleReportIncident}
-      />
+      {selectedIncident && (
+        <IncidentDetailModal
+          incident={selectedIncident}
+          onClose={() => setSelectedIncident(null)}
+          onAcknowledge={handleAcknowledge}
+          onResolve={handleResolve}
+          onCloseIncident={handleCloseIncident}
+        />
+      )}
     </div>
   );
 }
