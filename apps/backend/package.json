@@ -12,7 +12,10 @@
     "migration:run": "npm run migration:run --prefix ../..",
     "migration:revert": "npm run migration:revert --prefix ../..",
     "migration:generate": "npm run migration:generate --prefix ../..",
-    "migration:create": "npm run migration:create --prefix ../.."
+    "migration:create": "npm run migration:create --prefix ../..",
+    "test": "jest --config jest.config.ts",
+    "test:watch": "jest --config jest.config.ts --watch",
+    "test:cov": "jest --config jest.config.ts --coverage"
   },
   "dependencies": {
     "@nestjs/bullmq": "^11.0.4",
@@ -32,12 +35,17 @@
   },
   "devDependencies": {
     "@nestjs/cli": "^11.0.0",
+    "@nestjs/testing": "^11.1.24",
     "@types/jest": "^30.0.0",
     "@types/node": "^22.15.18",
+    "@types/supertest": "^7.2.0",
     "eslint": "^9.24.0",
     "eslint-config-prettier": "^10.1.2",
     "eslint-plugin-prettier": "^5.2.6",
+    "jest": "^30.4.2",
     "prettier": "^3.5.3",
+    "supertest": "^7.2.2",
+    "ts-jest": "^29.4.11",
     "ts-loader": "^9.5.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
