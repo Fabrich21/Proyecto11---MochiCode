@@ -8,8 +8,9 @@
     "dev:backend": "npm run start:dev -w backend",
     "build": "npm run build -w frontend && npm run build -w backend",
     "lint": "npm run lint -w frontend && npm run lint -w backend",
-    "migration:run": "node -r ts-node/register apps/backend/scripts/migration-runner.ts run",
-    "migration:revert": "node -r ts-node/register apps/backend/scripts/migration-runner.ts revert"
+    "migration:generate": "npx typeorm-ts-node-commonjs migration:generate -d apps/backend/src/database/data-source.ts apps/backend/src/database/migrations/InitBD",
+    "migration:run": "npx ts-node --project apps/backend/tsconfig.json apps/backend/scripts/migration-runner.ts run",
+    "migration:revert": "npx ts-node --project apps/backend/tsconfig.json apps/backend/scripts/migration-runner.ts revert"
   },
   "workspaces": [
     "apps/frontend",

@@ -6,6 +6,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { IngestionModule } from './ingestion/ingestion.module';
 import { WorkerModule } from './worker/worker.module';
+import { IncidentesModule } from './incidentes/incidentes.module'; // <-- Nueva importación
 
 @Module({
   imports: [
@@ -38,8 +39,9 @@ import { WorkerModule } from './worker/worker.module';
     }),
 
     // --- MÓDULOS DEL DOMINIO ---
-    IngestionModule, // Capa de entrada: recibe alertas y las encola en Redis
-    WorkerModule,    // Capa de procesamiento: desencola desde Redis y persiste en PostgreSQL
+    IngestionModule,  // Capa de entrada: recibe alertas y las encola en Redis
+    WorkerModule,     // Capa de procesamiento: desencola desde Redis y persiste en PostgreSQL
+    IncidentesModule, // <-- Capa de lectura: API para el frontend (Filtros y Paginación)
   ],
   controllers: [AppController],
   providers: [AppService],

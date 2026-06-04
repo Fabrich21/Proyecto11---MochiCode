@@ -1,26 +1,112 @@
-@import "tailwindcss";
+@import 'tailwindcss';
+@theme {
+  --color-background: #FFFFFF;
+  --color-foreground: #353535;
+  --color-primary: #3C6E71;
+  --color-secondary: #D9D9D9;
+  --color-accent: #284B63;
+  --color-border: #D9D9D9;
+  --color-input: #F5F5F5;
+  --color-muted: #D9D9D9;
+  --color-muted-foreground: #353535;
+  --color-destructive: #E94B3C;
+  --color-success: #3C6E71;
+  --color-warning: #F59E0B;
+  --color-info: #284B63;
+  --radius: 0.625rem;
+}
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
+  /* Palette */
+  --color-graphite: #353535; /* Graphite */
+  --color-stormy-teal: #3C6E71; /* Stormy Teal */
+  --color-white: #FFFFFF; /* White */
+  --color-alabaster-grey: #D9D9D9; /* Alabaster Grey */
+  --color-yale-blue: #284B63; /* Yale Blue */
+
+  /* Semantic tokens (mapped to palette) */
+  --background: var(--color-white);
+  --primary: var(--color-stormy-teal);
+  --foreground: var(--color-graphite);
+  --secondary: var(--color-alabaster-grey);
+  --accent: var(--color-yale-blue);
+  --border: var(--color-alabaster-grey);
+  --input: #F5F5F5;
+  --muted: var(--color-alabaster-grey);
+  --muted-foreground: var(--color-graphite);
+  --destructive: #E94B3C;
+  --success: var(--color-stormy-teal);
+  --warning: #F59E0B;
+  --info: var(--color-yale-blue);
+  --radius: 0.625rem;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html,
 body {
-  background: var(--background);
+  height: 100%;
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: 'Geist', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #353535;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3C6E71;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #284B63;
+}
+
+/* Selección de texto */
+::selection {
+  background: #3C6E71;
+  color: #FFFFFF;
+}
+
+::-moz-selection {
+  background: #3C6E71;
+  color: #FFFFFF;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: translateY(6px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in { animation: fadeIn 180ms cubic-bezier(.2,.9,.3,1) both; }
+.animate-scale-in { animation: scaleIn 220ms cubic-bezier(.2,.9,.3,1) both; }
+.animate-fade-up { animation: fadeUp 280ms cubic-bezier(.2,.9,.3,1) both; }
+
+/* Small utility for reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-in,
+  .animate-scale-in,
+  .animate-fade-up {
+    animation: none !important;
+  }
 }
