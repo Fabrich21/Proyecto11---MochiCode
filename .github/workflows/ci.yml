@@ -19,16 +19,16 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: 'yarn'
 
       - name: Instalar dependencias
-        run: npm ci
+        run: yarn install --frozen-lockfile
 
       - name: Ejecutar tests unitarios
-        run: npm run test -w backend
+        run: yarn workspace backend test
 
       - name: Generar reporte de cobertura
-        run: npm run test:cov -w backend
+        run: yarn workspace backend test:cov
 
       - name: Subir reporte de cobertura como artefacto
         uses: actions/upload-artifact@v4
