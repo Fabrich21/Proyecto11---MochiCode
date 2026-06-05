@@ -1,7 +1,6 @@
 'use client';
 
 import { IncidentDashboard } from '@/components/incident-dashboard';
-import { SystemStatusBar } from '@/components/system-status-bar';
 import { Bell } from 'lucide-react';
 
 export default function HomePage() {
@@ -23,13 +22,6 @@ export default function HomePage() {
           </div>
         </div>
       </header>
-
-      {/* Status Bar */}
-      <div className="bg-white border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-          <SystemStatusBar />
-        </div>
-      </div>
 
       {/* Dashboard Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
