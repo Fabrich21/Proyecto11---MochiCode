@@ -1,6 +1,8 @@
+import { IncidenteEstado } from '@proyecto/shared-types';
+
 export type IncidentSeverity = 'critical' | 'high' | 'medium';
 
-export type IncidentStatus = 'abierto' | 'en progreso' | 'resuelto' | 'cerrado';
+export type IncidentStatus = IncidenteEstado;
 
 export interface Incident {
   id: string;

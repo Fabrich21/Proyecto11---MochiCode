@@ -18,6 +18,7 @@
     "test:cov": "jest --config jest.config.ts --coverage"
   },
   "dependencies": {
+    "@proyecto/shared-types": "*",
     "@nestjs/bullmq": "^11.0.4",
     "@nestjs/common": "^11.0.0",
     "@nestjs/config": "^4.0.2",

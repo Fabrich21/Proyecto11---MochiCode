@@ -5,7 +5,8 @@ import { DataSource } from 'typeorm';
 import { WorkerService } from './worker.service';
 import { Sistema } from '../database/entities/sistema.entity';
 import { PoliticaSla } from '../database/entities/politica-sla.entity';
-import { Incidente, IncidenteEstado } from '../database/entities/incidente.entity';
+import { Incidente } from '../database/entities/incidente.entity';
+import { IncidenteEstado } from '@proyecto/shared-types';
 import { CreateAlertaDto } from '../ingestion/dto/create-alerta.dto';
 
 // ─────────────────────────────────────────────────────────────────────────────

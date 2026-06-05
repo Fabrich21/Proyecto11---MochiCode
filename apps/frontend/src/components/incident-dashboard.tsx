@@ -6,6 +6,8 @@ import { IncidentCard } from './incident-card';
 import { Incident } from './incident-types';
 import IncidentDetailModal from './incident-detail-modal';
 
+import { IncidenteEstado } from '@proyecto/shared-types';
+
 const mockIncidents: Incident[] = [
   {
     id: 'INC-2024-0042',
@@ -17,7 +19,7 @@ const mockIncidents: Incident[] = [
     createdAt: new Date(Date.now() - 45 * 60000),
     affectedUsers: 2400,
     affectedProject: 'pagos',
-    incidentStatus: 'abierto',
+    incidentStatus: IncidenteEstado.ABIERTO,
     acknowledgedAt: null,
     resolvedAt: null,
     closedAt: null,
@@ -33,7 +35,7 @@ const mockIncidents: Incident[] = [
     createdAt: new Date(Date.now() - 22 * 60000),
     affectedUsers: 8900,
     affectedProject: 'logistica',
-    incidentStatus: 'en progreso',
+    incidentStatus: IncidenteEstado.EN_PROGRESO,
     acknowledgedAt: new Date(Date.now() - 20 * 60000),
     resolvedAt: null,
     closedAt: null,
@@ -49,7 +51,7 @@ const mockIncidents: Incident[] = [
     createdAt: new Date(Date.now() - 13 * 60000),
     affectedUsers: 5200,
     affectedProject: 'api-gateway',
-    incidentStatus: 'en progreso',
+    incidentStatus: IncidenteEstado.EN_PROGRESO,
     acknowledgedAt: new Date(Date.now() - 12 * 60000),
     resolvedAt: null,
     closedAt: null,
@@ -74,7 +76,7 @@ const mockIncidents: Incident[] = [
     createdAt: new Date(Date.now() - 90 * 60000),
     affectedUsers: 1200,
     affectedProject: 'salud',
-    incidentStatus: 'resuelto',
+    incidentStatus: IncidenteEstado.CERRADO, // replaced resuelto with CERRADO to match enum
     acknowledgedAt: new Date(Date.now() - 85 * 60000),
     resolvedAt: new Date(Date.now() - 30 * 60000),
     closedAt: null,
@@ -110,17 +112,17 @@ export function IncidentDashboard() {
 
   function handleAcknowledge(incident: Incident) {
     if (incident.acknowledgedAt) return;
-    updateIncident({ ...incident, acknowledgedAt: new Date(), incidentStatus: incident.incidentStatus === 'abierto' ? 'en progreso' : incident.incidentStatus });
+    updateIncident({ ...incident, acknowledgedAt: new Date(), incidentStatus: incident.incidentStatus === IncidenteEstado.ABIERTO ? IncidenteEstado.EN_PROGRESO : incident.incidentStatus });
   }
 
   function handleResolve(incident: Incident) {
     if (incident.resolvedAt) return;
-    updateIncident({ ...incident, resolvedAt: new Date(), incidentStatus: 'resuelto' });
+    updateIncident({ ...incident, resolvedAt: new Date(), incidentStatus: IncidenteEstado.CERRADO });
   }
 
   function handleCloseIncident(incident: Incident) {
     if (incident.closedAt) return;
-    updateIncident({ ...incident, closedAt: new Date(), incidentStatus: 'cerrado' });
+    updateIncident({ ...incident, closedAt: new Date(), incidentStatus: IncidenteEstado.CERRADO });
   }
 
   const filteredIncidents = useMemo(() => {
