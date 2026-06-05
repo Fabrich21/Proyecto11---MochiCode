@@ -10,7 +10,8 @@
     "lint": "npm run lint -w frontend && npm run lint -w backend",
     "migration:generate": "npx typeorm-ts-node-commonjs migration:generate -d apps/backend/src/database/data-source.ts apps/backend/src/database/migrations/InitBD",
     "migration:run": "npx ts-node --project apps/backend/tsconfig.json apps/backend/scripts/migration-runner.ts run",
-    "migration:revert": "npx ts-node --project apps/backend/tsconfig.json apps/backend/scripts/migration-runner.ts revert"
+    "migration:revert": "npx ts-node --project apps/backend/tsconfig.json apps/backend/scripts/migration-runner.ts revert",
+    "test:load": "k6 run -e API_KEY=auth_p8_secret apps/backend/test/load/ingestion-stress.js"
   },
   "workspaces": [
     "apps/frontend",
@@ -20,7 +21,6 @@
   "author": "",
   "license": "ISC",
   "type": "commonjs",
-  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e",
   "devDependencies": {
     "@types/jest": "^30.0.0"
   }
