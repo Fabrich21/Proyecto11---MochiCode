@@ -1,9 +1,9 @@
 import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
 import { IngestionService } from './ingestion.service';
 import { CreateAlertaDto } from './dto/create-alerta.dto';
-import { ZeroTrustGuard } from 'src/common/guards/zero-trust/zero-trust.guard';
+import { ZeroTrustGuard } from '../common/guards/zero-trust/zero-trust.guard';
 
-@Controller('alertas')
+@Controller('ingestion/alertas')
 export class IngestionController {
   constructor(private readonly ingestionService: IngestionService) {}
 
