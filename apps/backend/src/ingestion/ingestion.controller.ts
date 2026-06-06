@@ -3,11 +3,11 @@ import { IngestionService } from './ingestion.service';
 import { CreateAlertaDto } from './dto/create-alerta.dto';
 import { ZeroTrustGuard } from 'src/common/guards/zero-trust/zero-trust.guard';
 
-@Controller('ingestion')
+@Controller('alertas')
 export class IngestionController {
   constructor(private readonly ingestionService: IngestionService) {}
 
-  @Post('alertas')
+  @Post()
   @HttpCode(HttpStatus.ACCEPTED) // Fuerza el código 202
   @UseGuards(ZeroTrustGuard) // <--- Aquí activamos la seguridad
   async recibirAlerta(@Body() createAlertaDto: CreateAlertaDto) {
