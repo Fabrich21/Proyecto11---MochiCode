@@ -36,7 +36,7 @@ describe('IngestionController — HTTP (guard mockeado)', () => {
 
   const validBody = { sistema_id: 'P1', payload: { nivel: 'critico' } };
 
-  describe('POST /ingestion/alertas', () => {
+  describe('POST /alertas', () => {
     it('should return 202 and response body when payload is valid', async () => {
       // Arrange
       mockIngestionService.encolarAlerta.mockResolvedValue({
@@ -48,7 +48,7 @@ describe('IngestionController — HTTP (guard mockeado)', () => {
 
       // Act
       const res = await request(app.getHttpServer())
-        .post('/ingestion/alertas')
+        .post('/alertas')
         .send(validBody)
         .expect(202);
 
@@ -68,7 +68,7 @@ describe('IngestionController — HTTP (guard mockeado)', () => {
 
       // Act
       await request(app.getHttpServer())
-        .post('/ingestion/alertas')
+        .post('/alertas')
         .send(validBody)
         .expect(202);
 
@@ -82,28 +82,28 @@ describe('IngestionController — HTTP (guard mockeado)', () => {
     it('should return 400 when sistema_id is missing', async () => {
       // Arrange — body incompleto
       await request(app.getHttpServer())
-        .post('/ingestion/alertas')
+        .post('/alertas')
         .send({ payload: { nivel: 'critico' } })
         .expect(400);
     });
 
     it('should return 400 when payload field is missing', async () => {
       await request(app.getHttpServer())
-        .post('/ingestion/alertas')
+        .post('/alertas')
         .send({ sistema_id: 'P1' })
         .expect(400);
     });
 
     it('should return 400 when body is empty', async () => {
       await request(app.getHttpServer())
-        .post('/ingestion/alertas')
+        .post('/alertas')
         .send({})
         .expect(400);
     });
 
     it('should return 400 when payload is a string instead of object', async () => {
       await request(app.getHttpServer())
-        .post('/ingestion/alertas')
+        .post('/alertas')
         .send({ sistema_id: 'P1', payload: 'not-an-object' })
         .expect(400);
     });
@@ -116,7 +116,7 @@ describe('IngestionController — HTTP (guard mockeado)', () => {
 
       // Act & Assert
       await request(app.getHttpServer())
-        .post('/ingestion/alertas')
+        .post('/alertas')
         .send(validBody)
         .expect(500);
     });
@@ -149,14 +149,14 @@ describe('IngestionController — ZeroTrustGuard integrado', () => {
 
   it('should return 401 when x-api-key header is missing', async () => {
     await request(app.getHttpServer())
-      .post('/ingestion/alertas')
+      .post('/alertas')
       .send({ sistema_id: 'P1', payload: { nivel: 'critico' } })
       .expect(401);
   });
 
   it('should return 401 when api key does not match sistema_id', async () => {
     await request(app.getHttpServer())
-      .post('/ingestion/alertas')
+      .post('/alertas')
       .set('x-api-key', 'wrong-key')
       .send({ sistema_id: 'P1', payload: { nivel: 'critico' } })
       .expect(401);
@@ -164,7 +164,7 @@ describe('IngestionController — ZeroTrustGuard integrado', () => {
 
   it('should return 401 when sistema_id is not registered (P99)', async () => {
     await request(app.getHttpServer())
-      .post('/ingestion/alertas')
+      .post('/alertas')
       .set('x-api-key', 'auth_p1_secret')
       .send({ sistema_id: 'P99', payload: { nivel: 'critico' } })
       .expect(401);
@@ -181,7 +181,7 @@ describe('IngestionController — ZeroTrustGuard integrado', () => {
 
     // Act & Assert
     await request(app.getHttpServer())
-      .post('/ingestion/alertas')
+      .post('/alertas')
       .set('x-api-key', 'auth_p1_secret')
       .send({ sistema_id: 'P1', payload: { nivel: 'critico' } })
       .expect(202);
@@ -198,7 +198,7 @@ describe('IngestionController — ZeroTrustGuard integrado', () => {
 
     // Act & Assert
     await request(app.getHttpServer())
-      .post('/ingestion/alertas')
+      .post('/alertas')
       .set('x-api-key', 'auth_p8_secret')
       .send({ sistema_id: 'P8', payload: { sensor: 'temp' } })
       .expect(202);

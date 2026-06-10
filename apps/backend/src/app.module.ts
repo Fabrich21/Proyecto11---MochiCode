@@ -10,7 +10,11 @@ import { IncidentesModule } from './incidentes/incidentes.module'; // <-- Nueva 
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
+// <-- MODIFICACIÓN APLICADA AQUÍ
+    ConfigModule.forRoot({ 
+      isGlobal: true,
+      envFilePath: '../../.env', // Le indicamos que el .env está en la raíz del monorepo
+    }),
     
     // Conexión a Base de Datos (PostgreSQL + TimescaleDB)
     TypeOrmModule.forRootAsync({

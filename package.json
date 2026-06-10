@@ -11,7 +11,7 @@
     "migration:generate": "npx typeorm-ts-node-commonjs migration:generate -d apps/backend/src/database/data-source.ts apps/backend/src/database/migrations/InitBD",
     "migration:run": "npx ts-node --project apps/backend/tsconfig.json apps/backend/scripts/migration-runner.ts run",
     "migration:revert": "npx ts-node --project apps/backend/tsconfig.json apps/backend/scripts/migration-runner.ts revert",
-    "test:load": "k6 run -e API_KEY=auth_p8_secret apps/backend/test/load/ingestion-stress.js"
+    "test:load": "k6 run -e API_KEY=auth_p08_secret apps/backend/test/load/ingestion-stress.js"
   },
   "workspaces": [
     "apps/frontend",
