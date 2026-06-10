@@ -3,8 +3,8 @@ import { getIncident, updateIncident } from '../../_incidentsStore';
 
 const BACKEND_URL = process.env.BACKEND_URL || '';
 
-export async function GET(request: Request, { params }: { params: { id: string } }) {
-  const { id } = params;
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   if (BACKEND_URL) {
     const url = `${BACKEND_URL.replace(/\/$/, '')}/api/incidents/${encodeURIComponent(id)}`;
     const res = await fetch(url);
@@ -17,8 +17,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
   return NextResponse.json(record);
 }
 
-export async function PATCH(request: Request, { params }: { params: { id: string } }) {
-  const { id } = params;
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   if (BACKEND_URL) {
     const url = `${BACKEND_URL.replace(/\/$/, '')}/api/incidents/${encodeURIComponent(id)}`;
     const body = await request.text();

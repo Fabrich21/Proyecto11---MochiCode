@@ -9,16 +9,7 @@ import {
 import { Sistema } from './sistema.entity';
 import { PoliticaSla } from './politica-sla.entity';
 
-/**
- * Estados posibles de un incidente.
- * Replica el tipo ENUM "incidente_estado_enum" que existe en PostgreSQL
- * (definido en la migración CreateIncidentsTable).
- */
-export enum IncidenteEstado {
-  ABIERTO = 'ABIERTO',
-  EN_PROGRESO = 'EN_PROGRESO',
-  CERRADO = 'CERRADO',
-}
+import { IncidenteEstado, IIncidente } from '@proyecto/shared-types';
 
 /**
  * Entidad que mapea la tabla "incidentes".
@@ -26,7 +17,7 @@ export enum IncidenteEstado {
  * procesa una alerta y no puede ser eliminado (solo cambia de estado).
  */
 @Entity('incidentes')
-export class Incidente {
+export class Incidente implements IIncidente {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 

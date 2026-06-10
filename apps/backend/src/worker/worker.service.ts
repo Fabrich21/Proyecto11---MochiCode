@@ -7,7 +7,8 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { Sistema } from '../database/entities/sistema.entity';
 import { PoliticaSla } from '../database/entities/politica-sla.entity';
-import { Incidente, IncidenteEstado } from '../database/entities/incidente.entity';
+import { Incidente } from '../database/entities/incidente.entity';
+import { IncidenteEstado } from '@proyecto/shared-types';
 import { CreateAlertaDto } from '../ingestion/dto/create-alerta.dto';
 
 /**
