@@ -32,6 +32,7 @@ describe('IngestionService', () => {
   describe('encolarAlerta()', () => {
     const dto: CreateAlertaDto = {
       sistema_id: 'P1',
+      creado_en: new Date().toISOString(),
       payload: { nivel: 'alto', mensaje: 'CPU > 90%' },
     };
 
@@ -99,7 +100,7 @@ describe('IngestionService', () => {
     it('should work with different sistema_id values', async () => {
       // Arrange
       mockQueue.add.mockResolvedValue({ id: 'job-2' });
-      const dtoP8: CreateAlertaDto = { sistema_id: 'P8', payload: { sensor: 'temp' } };
+      const dtoP8: CreateAlertaDto = { sistema_id: 'P8', creado_en: new Date().toISOString(), payload: { sensor: 'temp' } };
 
       // Act
       const result = await service.encolarAlerta(dtoP8);

@@ -32,6 +32,7 @@ describe('AlertasProcessor', () => {
   describe('process()', () => {
     const dto: CreateAlertaDto = {
       sistema_id: 'P1',
+      creado_en: new Date().toISOString(),
       payload: { nivel: 'alto', sensor: 'cpu' },
     };
 
@@ -78,7 +79,7 @@ describe('AlertasProcessor', () => {
       );
 
       // Act & Assert
-      await expect(processor.process(buildJob({ sistema_id: 'P99', payload: {} }))).rejects.toThrow(
+      await expect(processor.process(buildJob({ sistema_id: 'P99', creado_en: new Date().toISOString(), payload: {} }))).rejects.toThrow(
         NotFoundException,
       );
     });
@@ -86,7 +87,7 @@ describe('AlertasProcessor', () => {
     it('should pass the full dto including payload to procesarAlerta', async () => {
       // Arrange
       mockWorkerService.procesarAlerta.mockResolvedValue(undefined);
-      const richDto: CreateAlertaDto = { sistema_id: 'P2', payload: { temp: 95, unit: 'C' } };
+      const richDto: CreateAlertaDto = { sistema_id: 'P2', creado_en: new Date().toISOString(), payload: { temp: 95, unit: 'C' } };
 
       // Act
       await processor.process(buildJob(richDto));

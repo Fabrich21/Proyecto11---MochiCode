@@ -24,6 +24,9 @@ jobs:
       - name: Instalar dependencias
         run: npm install
 
+      - name: Compilar paquetes compartidos
+        run: npm run build -w @proyecto/shared-types
+
       - name: Ejecutar tests unitarios
         run: npm run test -w backend
 

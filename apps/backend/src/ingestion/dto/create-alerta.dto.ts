@@ -1,11 +1,16 @@
-import { IsNotEmpty, IsObject, IsString } from 'class-validator';
+import { IsNotEmpty, IsObject, IsString, IsDateString } from 'class-validator';
 
 export class CreateAlertaDto {
   @IsString()
   @IsNotEmpty()
-  sistema_id!: string; // <-- Agregamos el "!" aquí
+  sistema_id!: string;
+
+  // Validación estricta para asegurar el estándar ISO 8601 exigido por el contrato
+  @IsDateString()
+  @IsNotEmpty()
+  creado_en!: string;
 
   @IsObject()
   @IsNotEmpty()
-  payload!: Record<string, any>; // <-- Agregamos el "!" aquí
+  payload!: Record<string, any>;
 }

@@ -3,13 +3,14 @@ import { IngestionService } from './ingestion.service';
 import { CreateAlertaDto } from './dto/create-alerta.dto';
 import { ZeroTrustGuard } from '../common/guards/zero-trust/zero-trust.guard';
 
-@Controller('ingestion/alertas')
+// <-- Ajuste de ruta: Se elimina "ingestion/" para exponer /api/v1/alertas
+@Controller('alertas') 
 export class IngestionController {
   constructor(private readonly ingestionService: IngestionService) {}
 
   @Post()
   @HttpCode(HttpStatus.ACCEPTED) // Fuerza el código 202
-  @UseGuards(ZeroTrustGuard) // <--- Aquí activamos la seguridad
+  @UseGuards(ZeroTrustGuard) // Mantenemos seguridad por API Key para IoT temporalmente
   async recibirAlerta(@Body() createAlertaDto: CreateAlertaDto) {
     // Llama al servicio para encolar la alerta
     return this.ingestionService.encolarAlerta(createAlertaDto);
