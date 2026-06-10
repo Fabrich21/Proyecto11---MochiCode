@@ -5,6 +5,7 @@ import { Search } from 'lucide-react';
 import { IncidentCard } from './incident-card';
 import { Incident } from './incident-types';
 import IncidentDetailModal from './incident-detail-modal';
+import SlaViewer from './sla-viewer';
 
 import { IncidenteEstado } from '@proyecto/shared-types';
 
@@ -105,9 +106,45 @@ export function IncidentDashboard() {
     };
   }, [selectedIncident]);
 
+  useEffect(() => {
+    let mounted = true;
+
+    async function load() {
+      try {
+        const res = await fetch('/api/incidents');
+        if (!res.ok) throw new Error('fetch_failed');
+        const data = await res.json();
+        if (!mounted) return;
+        if (Array.isArray(data) && data.length > 0) {
+          setIncidents(data as Incident[]);
+        }
+      } catch (err) {
+        // Keep mock data as fallback
+      }
+    }
+
+    load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   function updateIncident(updated: Incident) {
     setIncidents((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
     setSelectedIncident(updated);
+
+    // Optimistic persist to backend
+    (async () => {
+      try {
+        await fetch(`/api/incidents/${encodeURIComponent(updated.id)}`, {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(updated),
+        });
+      } catch (err) {
+        // ignore network errors for now
+      }
+    })();
   }
 
   function handleAcknowledge(incident: Incident) {
@@ -190,6 +227,11 @@ export function IncidentDashboard() {
           <p className="text-sm font-medium text-foreground/60">Medios</p>
           <p className="text-3xl font-bold text-info mt-2">{incidents.filter((i) => i.severity === 'medium').length}</p>
         </div>
+      </div>
+
+      {/* SLA Viewer (compact) */}
+      <div className="mt-2">
+        <SlaViewer incidents={incidents} />
       </div>
 
       {/* Incidents List */}

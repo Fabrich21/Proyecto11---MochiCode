@@ -67,23 +67,23 @@ export function IncidentDetailModal({ incident, onClose, onAcknowledge, onResolv
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <InfoBlock icon={<Clock className="h-4 w-4" />} label="created_at" value={formatDate(incident.createdAt as any)} />
-            <InfoBlock icon={<Users className="h-4 w-4" />} label="incident_id" value={incident.id} />
+            <InfoBlock icon={<Clock className="h-4 w-4" />} label="Creado" value={formatDate(incident.createdAt as any)} />
+            <InfoBlock icon={<Users className="h-4 w-4" />} label="ID del incidente" value={incident.id} />
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <InfoBlock label="affected_project" value={incident.affectedProject || 'No reportado'} />
-            <InfoBlock label="incident_status" value={incident.incidentStatus || 'No reportado'} />
+            <InfoBlock label="Proyecto afectado" value={incident.affectedProject || 'No reportado'} />
+            <InfoBlock label="Status del incidente" value={incident.incidentStatus || 'No reportado'} />
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <InfoBlock label="acknowledged_at" value={formatDate(incident.acknowledgedAt as any)} />
-            <InfoBlock label="resolved_at" value={formatDate(incident.resolvedAt as any)} />
-            <InfoBlock label="closed_at" value={formatDate(incident.closedAt as any)} />
+            <InfoBlock label="reconocido" value={formatDate(incident.acknowledgedAt as any)} />
+            <InfoBlock label="resuelto" value={formatDate(incident.resolvedAt as any)} />
+            <InfoBlock label="cerrado" value={formatDate(incident.closedAt as any)} />
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <InfoBlock label="sla_target_minutes" value={incident.slaTargetMinutes ?? 'No definido'} />
+            <InfoBlock label="SLA minutos previstos" value={incident.slaTargetMinutes ?? 'No definido'} />
           </div>
         </div>
 
@@ -94,7 +94,7 @@ export function IncidentDetailModal({ incident, onClose, onAcknowledge, onResolv
             disabled={!!incident.acknowledgedAt}
             className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium transition disabled:opacity-50"
           >
-            <Check className="h-4 w-4" /> Acknowledge
+            <Check className="h-4 w-4" /> Reconocido
           </button>
 
           <button
@@ -103,7 +103,7 @@ export function IncidentDetailModal({ incident, onClose, onAcknowledge, onResolv
             disabled={!!incident.resolvedAt}
             className="inline-flex items-center gap-2 rounded-md border border-border bg-success/10 px-3 py-2 text-sm font-medium transition disabled:opacity-50"
           >
-            <CheckCircle className="h-4 w-4" /> Resolve
+            <CheckCircle className="h-4 w-4" /> Resuelto
           </button>
 
           <button
@@ -112,7 +112,7 @@ export function IncidentDetailModal({ incident, onClose, onAcknowledge, onResolv
             disabled={!!incident.closedAt}
             className="inline-flex items-center gap-2 rounded-md border border-border bg-destructive/10 px-3 py-2 text-sm font-medium transition disabled:opacity-50"
           >
-            <Archive className="h-4 w-4" /> Close
+            <Archive className="h-4 w-4" /> Cerrado
           </button>
         </footer>
       </section>
