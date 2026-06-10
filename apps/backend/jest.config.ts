@@ -13,6 +13,7 @@ const config: any = {
   moduleNameMapper: {
     // Resuelve el alias "src/" que usa el controlador al importar el guard
     '^src/(.*)$': '<rootDir>/$1',
+    '^@proyecto/shared-types$': '<rootDir>/../../../packages/shared-types/src/index.ts',
   },
 };
 

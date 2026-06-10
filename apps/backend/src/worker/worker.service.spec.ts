@@ -28,6 +28,7 @@ const incidenteActivo: Partial<Incidente> = {
 
 const dto: CreateAlertaDto = {
   sistema_id: 'P1',
+  creado_en: new Date().toISOString(),
   payload: { nivel: 'critico', mensaje: 'CPU > 90%' },
 };
 

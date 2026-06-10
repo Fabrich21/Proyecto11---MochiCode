@@ -18,7 +18,16 @@ describe('ZeroTrustGuard', () => {
     }) as ExecutionContext;
 
   beforeEach(() => {
-    guard = new ZeroTrustGuard();
+    const mockConfigService = {
+      get: (key: string) => {
+        if (key.startsWith('API_KEY_P') && key !== 'API_KEY_P99') {
+          const sys = key.split('_')[2];
+          return `auth_${sys.toLowerCase()}_secret`;
+        }
+        return null;
+      }
+    };
+    guard = new ZeroTrustGuard(mockConfigService as any);
   });
 
   it('should be defined', () => {

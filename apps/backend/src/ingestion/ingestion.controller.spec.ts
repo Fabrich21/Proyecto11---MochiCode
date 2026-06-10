@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, InternalServerErrorException, ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as request from 'supertest';
 import { IngestionController } from './ingestion.controller';
 import { IngestionService } from './ingestion.service';
@@ -34,7 +35,7 @@ describe('IngestionController — HTTP (guard mockeado)', () => {
   afterAll(() => app.close());
   afterEach(() => jest.clearAllMocks());
 
-  const validBody = { sistema_id: 'P1', payload: { nivel: 'critico' } };
+  const validBody = { sistema_id: 'P1', creado_en: new Date().toISOString(), payload: { nivel: 'critico' } };
 
   describe('POST /alertas', () => {
     it('should return 202 and response body when payload is valid', async () => {
@@ -134,7 +135,19 @@ describe('IngestionController — ZeroTrustGuard integrado', () => {
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [IngestionController],
-      providers: [{ provide: IngestionService, useValue: mockService }],
+      providers: [
+        { provide: IngestionService, useValue: mockService },
+        {
+          provide: ConfigService,
+          useValue: {
+            get: (key: string) => {
+              if (key === 'API_KEY_P1') return 'auth_p1_secret';
+              if (key === 'API_KEY_P8') return 'auth_p8_secret';
+              return null;
+            },
+          },
+        },
+      ],
     }).compile();
 
     app = module.createNestApplication();
@@ -150,7 +163,7 @@ describe('IngestionController — ZeroTrustGuard integrado', () => {
   it('should return 401 when x-api-key header is missing', async () => {
     await request(app.getHttpServer())
       .post('/alertas')
-      .send({ sistema_id: 'P1', payload: { nivel: 'critico' } })
+      .send({ sistema_id: 'P1', creado_en: new Date().toISOString(), payload: { nivel: 'critico' } })
       .expect(401);
   });
 
@@ -158,7 +171,7 @@ describe('IngestionController — ZeroTrustGuard integrado', () => {
     await request(app.getHttpServer())
       .post('/alertas')
       .set('x-api-key', 'wrong-key')
-      .send({ sistema_id: 'P1', payload: { nivel: 'critico' } })
+      .send({ sistema_id: 'P1', creado_en: new Date().toISOString(), payload: { nivel: 'critico' } })
       .expect(401);
   });
 
@@ -166,7 +179,7 @@ describe('IngestionController — ZeroTrustGuard integrado', () => {
     await request(app.getHttpServer())
       .post('/alertas')
       .set('x-api-key', 'auth_p1_secret')
-      .send({ sistema_id: 'P99', payload: { nivel: 'critico' } })
+      .send({ sistema_id: 'P99', creado_en: new Date().toISOString(), payload: { nivel: 'critico' } })
       .expect(401);
   });
 
@@ -183,7 +196,7 @@ describe('IngestionController — ZeroTrustGuard integrado', () => {
     await request(app.getHttpServer())
       .post('/alertas')
       .set('x-api-key', 'auth_p1_secret')
-      .send({ sistema_id: 'P1', payload: { nivel: 'critico' } })
+      .send({ sistema_id: 'P1', creado_en: new Date().toISOString(), payload: { nivel: 'critico' } })
       .expect(202);
   });
 
@@ -200,7 +213,7 @@ describe('IngestionController — ZeroTrustGuard integrado', () => {
     await request(app.getHttpServer())
       .post('/alertas')
       .set('x-api-key', 'auth_p8_secret')
-      .send({ sistema_id: 'P8', payload: { sensor: 'temp' } })
+      .send({ sistema_id: 'P8', creado_en: new Date().toISOString(), payload: { sensor: 'temp' } })
       .expect(202);
   });
 });
