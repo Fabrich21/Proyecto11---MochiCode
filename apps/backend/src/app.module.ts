@@ -2,11 +2,14 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { IngestionModule } from './ingestion/ingestion.module';
 import { WorkerModule } from './worker/worker.module';
 import { IncidentesModule } from './incidentes/incidentes.module'; // <-- Nueva importación
+import { HttpClientModule } from './common/http-client/http-client.module';
 
 @Module({
   imports: [
@@ -42,12 +45,26 @@ import { IncidentesModule } from './incidentes/incidentes.module'; // <-- Nueva 
       }),
     }),
 
+    // Escudo antispam: Rate Limiting Global
+    ThrottlerModule.forRoot([{
+      ttl: 60000, // Una ventana de 60 segundos (1 minuto)
+      limit: 100, // Máximo 100 peticiones por ventana
+    }]),
+
     // --- MÓDULOS DEL DOMINIO ---
+    HttpClientModule, // Cliente global tolerante a fallos para conectarse con P06, P09, P12...
     IngestionModule,  // Capa de entrada: recibe alertas y las encola en Redis
     WorkerModule,     // Capa de procesamiento: desencola desde Redis y persiste en PostgreSQL
     IncidentesModule, // <-- Capa de lectura: API para el frontend (Filtros y Paginación)
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // Activamos el escudo en todas las rutas del sistema por defecto
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

@@ -3,6 +3,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { Sistema } from '../database/entities/sistema.entity';
@@ -11,16 +12,10 @@ import { Incidente } from '../database/entities/incidente.entity';
 import { IncidenteEstado } from '@proyecto/shared-types';
 import { CreateAlertaDto } from '../ingestion/dto/create-alerta.dto';
 
-/**
- * UUID centinela para incidentes generados automáticamente por el sistema.
- * Representa al "actor sistema" cuando no hay un usuario humano que cree el ticket.
- * TODO: reemplazar por JWT.sub de P12 cuando la integración de auth esté completa.
- */
-const SISTEMA_AUTOMATICO_UUID = '00000000-0000-0000-0000-000000000001';
-
 @Injectable()
 export class WorkerService {
   private readonly logger = new Logger(WorkerService.name);
+  private readonly sistemaAutomaticoUuid: string;
 
   constructor(
     // DataSource nos da control total sobre transacciones (QueryRunner)
@@ -32,7 +27,15 @@ export class WorkerService {
 
     @InjectRepository(PoliticaSla)
     private readonly politicaSlaRepo: Repository<PoliticaSla>,
-  ) {}
+
+    private readonly configService: ConfigService,
+  ) {
+    // Obtenemos el UUID desde las variables de entorno, usando el quemado como fallback por seguridad
+    this.sistemaAutomaticoUuid = this.configService.get<string>(
+      'SISTEMA_AUTOMATICO_UUID',
+      '00000000-0000-0000-0000-000000000001',
+    )!;
+  }
 
   /**
    * Método principal invocado por el Processor.
@@ -119,7 +122,7 @@ export class WorkerService {
            VALUES (gen_random_uuid(), $1, $2, $3, now())`,
           [
             incidenteId,                                                         // $1
-            SISTEMA_AUTOMATICO_UUID,                                             // $2
+            this.sistemaAutomaticoUuid,                                          // $2
             `Nueva alerta recibida desde ${dto.sistema_id} en incidente activo`, // $3
           ],
         );
@@ -135,7 +138,7 @@ export class WorkerService {
           descripcion,
           estado: IncidenteEstado.ABIERTO,
           sistemaId: dto.sistema_id,
-          creadorUsuarioId: SISTEMA_AUTOMATICO_UUID,
+          creadorUsuarioId: this.sistemaAutomaticoUuid,
           politicaSlaId: politicaSla.id,
         });
         const incidenteGuardado = await incidenteRepo.save(nuevoIncidente);
@@ -152,8 +155,8 @@ export class WorkerService {
            VALUES (gen_random_uuid(), $1, NULL, $2, $3, now())`,
           [
             incidenteId,               // $1 — FK al incidente recién creado
-            IncidenteEstado.ABIERTO,   // $2 — primer estado registrado
-            SISTEMA_AUTOMATICO_UUID,   // $3 — actor: sistema automático
+            IncidenteEstado.ABIERTO,      // $2 — primer estado registrado
+            this.sistemaAutomaticoUuid,   // $3 — actor: sistema automático
           ],
         );
 
@@ -164,7 +167,7 @@ export class WorkerService {
            VALUES (gen_random_uuid(), $1, $2, $3, now())`,
           [
             incidenteId,                                                                  // $1
-            SISTEMA_AUTOMATICO_UUID,                                                      // $2
+            this.sistemaAutomaticoUuid,                                                   // $2
             `Incidente creado automáticamente por alerta de ${dto.sistema_id}`,           // $3
           ],
         );

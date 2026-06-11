@@ -87,6 +87,13 @@ describe('ZeroTrustGuard', () => {
       expect(() => guard.canActivate(ctx)).toThrow(UnauthorizedException);
     });
 
+    it('should throw UnauthorizedException when sistema_id is not a string (DoS protection)', () => {
+      // Arrange - Simulating an attacker sending an object to cause a TypeError on .toUpperCase()
+      const ctx = buildContext('auth_p1_secret', { inyeccion: true } as any);
+      // Act & Assert
+      expect(() => guard.canActivate(ctx)).toThrow(UnauthorizedException);
+    });
+
     it('should throw UnauthorizedException when P1 key is used for P2', () => {
       // Arrange — cross-system key reuse
       const ctx = buildContext('auth_p1_secret', 'P2');
