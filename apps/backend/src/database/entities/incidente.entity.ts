@@ -73,6 +73,11 @@ export class Incidente {
   @Column({ name: 'fecha_resolucion', type: 'timestamptz', nullable: true })
   fechaResolucion?: Date;
 
+  // FLAG activado por el SlaScheduler cuando el ticket supera el tiempo de la política SLA.
+  // Una vez en TRUE, el cron no vuelve a procesar el mismo incidente.
+  @Column({ name: 'sla_vencido', type: 'boolean', default: false })
+  slaVencido!: boolean;
+
   // Relaciones para joins opcionales (lazy loading desactivado por defecto)
   @ManyToOne(() => Sistema)
   @JoinColumn({ name: 'sistema_id' })
