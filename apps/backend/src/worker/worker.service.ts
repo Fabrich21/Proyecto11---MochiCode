@@ -11,6 +11,8 @@ import { PoliticaSla } from '../database/entities/politica-sla.entity';
 import { Incidente } from '../database/entities/incidente.entity';
 import { IncidenteEstado } from '@proyecto/shared-types';
 import { CreateAlertaDto } from '../ingestion/dto/create-alerta.dto';
+import { SlaUtil } from '../common/utils/sla.util';
+import { PriorityRulesEngine } from '../common/utils/priority-rules.engine';
 
 @Injectable()
 export class WorkerService {
@@ -67,14 +69,23 @@ export class WorkerService {
     }
 
     // -----------------------------------------------------------------------
-    // PASO 2: Buscar la política SLA por defecto (la más restrictiva).
-    // En una iteración futura, el payload puede incluir "nivel_criticidad"
-    // para seleccionar la política correcta de forma dinámica.
+    // PASO 2: Buscar la política SLA según prioridad.
+    // El Motor de Reglas asigna la criticidad basado en el origen del webhook,
+    // sobreescribiendo incondicionalmente cualquier prioridad del payload.
     // -----------------------------------------------------------------------
-    const politicaSla = await this.politicaSlaRepo.findOne({
-      where: {},
-      order: { tiempoMaximoResolucionMinutos: 'ASC' },
+    const prioridadCalculada = PriorityRulesEngine.calcularPrioridad(dto.sistema_id, dto.payload);
+    
+    let politicaSla = await this.politicaSlaRepo.findOne({
+      where: { nombre: prioridadCalculada },
     });
+
+    if (!politicaSla) {
+      this.logger.warn(`Política SLA para prioridad "${prioridadCalculada}" no encontrada. Usando la más restrictiva por defecto.`);
+      politicaSla = await this.politicaSlaRepo.findOne({
+        where: {},
+        order: { tiempoMaximoResolucionMinutos: 'ASC' },
+      });
+    }
 
     if (!politicaSla) {
       throw new NotFoundException(
@@ -130,8 +141,14 @@ export class WorkerService {
         // ── RAMA B: no hay ticket activo → crear uno nuevo ───────────────────
 
         // 3b. Insertar el incidente principal
-        const titulo = `[${dto.sistema_id}] Alerta automática — ${new Date().toISOString()}`;
+        const fechaCreacion = new Date();
+        const titulo = `[${dto.sistema_id}] Alerta automática — ${fechaCreacion.toISOString()}`;
         const descripcion = `Payload inicial: ${JSON.stringify(dto.payload)}`;
+
+        const fechaLimiteResolucion = SlaUtil.calcularFechaLimiteResolucion(
+          fechaCreacion,
+          politicaSla.tiempoMaximoResolucionMinutos
+        );
 
         const nuevoIncidente = incidenteRepo.create({
           titulo,
@@ -140,6 +157,9 @@ export class WorkerService {
           sistemaId: dto.sistema_id,
           creadorUsuarioId: this.sistemaAutomaticoUuid,
           politicaSlaId: politicaSla.id,
+          prioridad: prioridadCalculada,
+          creadoEn: fechaCreacion,
+          fechaLimiteResolucion,
         });
         const incidenteGuardado = await incidenteRepo.save(nuevoIncidente);
         incidenteId = incidenteGuardado.id;

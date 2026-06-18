@@ -16,6 +16,7 @@ export interface IIncidente {
   asignadoAUsuarioId?: string;
   prioridad: string;
   fechaResolucion?: Date;
+  fechaLimiteResolucion?: Date;
 }
 
 export interface IUpdateEstadoIncidenteDto {

@@ -64,6 +64,9 @@ export class Incidente implements IIncidente {
   @Column({ name: 'fecha_resolucion', type: 'timestamptz', nullable: true })
   fechaResolucion?: Date;
 
+  @Column({ name: 'fecha_limite_resolucion', type: 'timestamptz', nullable: true })
+  fechaLimiteResolucion?: Date;
+
   // Relaciones para joins opcionales (lazy loading desactivado por defecto)
   @ManyToOne(() => Sistema)
   @JoinColumn({ name: 'sistema_id' })
