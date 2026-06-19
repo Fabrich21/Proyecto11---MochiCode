@@ -3,12 +3,15 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, In, Repository } from 'typeorm';
 import { Sistema } from '../database/entities/sistema.entity';
 import { PoliticaSla } from '../database/entities/politica-sla.entity';
-import { Incidente, IncidenteEstado } from '../database/entities/incidente.entity';
+import { Incidente } from '../database/entities/incidente.entity';
+import { IncidenteEstado } from '@proyecto/shared-types';
 import { CreateAlertaDto } from '../ingestion/dto/create-alerta.dto';
+import { PayloadNormalizerService } from '../ingestion/normalizer/payload-normalizer.service';
 
 /**
  * UUID centinela para incidentes generados automáticamente por el sistema.
@@ -22,15 +25,15 @@ export class WorkerService {
   private readonly logger = new Logger(WorkerService.name);
 
   constructor(
-    // DataSource nos da control total sobre transacciones (QueryRunner)
     private readonly dataSource: DataSource,
 
-    // Repositorios para consultas de lectura previas a la transacción
     @InjectRepository(Sistema)
     private readonly sistemaRepo: Repository<Sistema>,
 
     @InjectRepository(PoliticaSla)
     private readonly politicaSlaRepo: Repository<PoliticaSla>,
+
+    private readonly normalizerService: PayloadNormalizerService,
   ) {}
 
   /**
@@ -48,8 +51,15 @@ export class WorkerService {
     this.logger.log(`Procesando alerta del sistema: ${dto.sistema_id}`);
 
     // -----------------------------------------------------------------------
+    // PASO 0: Normalizar el payload externo al esquema interno.
+    // -----------------------------------------------------------------------
+    const normalizado = this.normalizerService.normalize(dto);
+    this.logger.debug(
+      `Normalizado — prioridad: ${normalizado.prioridad} | estado sugerido: ${normalizado.estadoSugerido}`,
+    );
+
+    // -----------------------------------------------------------------------
     // PASO 1: Validar que el sistema emisor esté registrado en BD.
-    // Si no existe, lanzamos error para que BullMQ reintente el job.
     // -----------------------------------------------------------------------
     const sistema = await this.sistemaRepo.findOne({
       where: { sistemaId: dto.sistema_id },
@@ -63,14 +73,23 @@ export class WorkerService {
     }
 
     // -----------------------------------------------------------------------
-    // PASO 2: Buscar la política SLA por defecto (la más restrictiva).
-    // En una iteración futura, el payload puede incluir "nivel_criticidad"
-    // para seleccionar la política correcta de forma dinámica.
+    // PASO 2: Seleccionar política SLA según la prioridad normalizada.
+    // Busca por nombre que contenga la prioridad (ej. "SLA Crítica").
+    // Fallback: política más restrictiva si no hay coincidencia.
     // -----------------------------------------------------------------------
-    const politicaSla = await this.politicaSlaRepo.findOne({
-      where: {},
-      order: { tiempoMaximoResolucionMinutos: 'ASC' },
-    });
+    const politicaPorPrioridad = await this.politicaSlaRepo
+      .createQueryBuilder('sla')
+      .where('UPPER(sla.nombre) LIKE :prioridad', {
+        prioridad: `%${normalizado.prioridad}%`,
+      })
+      .getOne();
+
+    const politicaSla =
+      politicaPorPrioridad ??
+      (await this.politicaSlaRepo.findOne({
+        where: {},
+        order: { tiempoMaximoResolucionMinutos: 'ASC' },
+      }));
 
     if (!politicaSla) {
       throw new NotFoundException(
@@ -125,20 +144,20 @@ export class WorkerService {
       } else {
         // ── RAMA B: no hay ticket activo → crear uno nuevo ───────────────────
 
-        // 3b. Insertar el incidente principal
-        const titulo = `[${dto.sistema_id}] Alerta automática — ${new Date().toISOString()}`;
-        const descripcion = `Payload inicial: ${JSON.stringify(dto.payload)}`;
-
+        // 3b. Insertar el incidente principal con datos normalizados
         const nuevoIncidente = incidenteRepo.create({
-          titulo,
-          descripcion,
-          estado: IncidenteEstado.ABIERTO,
+          titulo: normalizado.titulo,
+          descripcion: normalizado.descripcion,
+          estado: normalizado.estadoSugerido,
+          prioridad: normalizado.prioridad,
           sistemaId: dto.sistema_id,
           creadorUsuarioId: SISTEMA_AUTOMATICO_UUID,
           politicaSlaId: politicaSla.id,
         });
         const incidenteGuardado = await incidenteRepo.save(nuevoIncidente);
-        incidenteId = incidenteGuardado.id;
+        incidenteId = Array.isArray(incidenteGuardado)
+          ? incidenteGuardado[0].id
+          : incidenteGuardado.id;
 
         // 3c. Registrar el estado inicial en historial_estados (hypertable).
         // estado_anterior = NULL porque el incidente nace directamente como ABIERTO.

@@ -1,6 +1,6 @@
 import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
 import { Type } from 'class-transformer';
-import { IncidenteEstado } from '../../database/entities/incidente.entity';
+import { IncidenteEstado } from '@proyecto/shared-types';
 
 export class GetIncidentesDto {
   @IsOptional()
