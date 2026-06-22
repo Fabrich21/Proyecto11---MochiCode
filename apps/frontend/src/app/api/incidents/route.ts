@@ -5,7 +5,7 @@ const BACKEND_URL = process.env.BACKEND_URL || '';
 
 export async function GET() {
   if (BACKEND_URL) {
-    const url = `${BACKEND_URL.replace(/\/$/, '')}/api/incidents`;
+    const url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/incidentes`;
     const res = await fetch(url);
     const data = await res.json();
     return NextResponse.json(data, { status: res.status });
@@ -17,7 +17,7 @@ export async function GET() {
 
 export async function POST(request: Request) {
   if (BACKEND_URL) {
-    const url = `${BACKEND_URL.replace(/\/$/, '')}/api/incidents`;
+    const url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/incidentes`;
     const body = await request.text();
     const res = await fetch(url, {
       method: 'POST',

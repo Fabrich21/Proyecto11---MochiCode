@@ -5,11 +5,14 @@ const BACKEND_URL = process.env.BACKEND_URL || '';
 
 export async function POST(request: Request) {
   if (BACKEND_URL) {
-    const url = `${BACKEND_URL.replace(/\/$/, '')}/ingestion/alertas`;
+    const url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/alertas`;
     const body = await request.text();
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': request.headers.get('content-type') || 'application/json' },
+      headers: { 
+        'content-type': request.headers.get('content-type') || 'application/json',
+        'x-api-key': process.env.API_KEY_P08 || 'auth_p08_secret' // Llave requerida por ZeroTrustGuard
+      },
       body,
     });
     const data = await res.text();
