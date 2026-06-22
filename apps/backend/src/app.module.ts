@@ -22,27 +22,49 @@ import { HttpClientModule } from './common/http-client/http-client.module';
     // Conexión a Base de Datos (PostgreSQL + TimescaleDB)
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        type: 'postgres',
-        host: configService.get<string>('DB_HOST', 'localhost'),
-        port: configService.get<number>('DB_PORT', 5433),
-        username: configService.get<string>('DB_USER', 'postgres'),
-        password: configService.get<string>('DB_PASSWORD', 'postgres'),
-        database: configService.get<string>('DB_NAME', 'proyecto11'),
-        autoLoadEntities: true,
-        synchronize: false,
-      }),
+      useFactory: (configService: ConfigService) => {
+        const isProduction = configService.get<string>('NODE_ENV') === 'production';
+        const databaseUrl = configService.get<string>('DATABASE_URL');
+        
+        return {
+          type: 'postgres',
+          ...(databaseUrl ? { url: databaseUrl } : {
+            host: configService.get<string>('DB_HOST', 'localhost'),
+            port: configService.get<number>('DB_PORT', 5433),
+            username: configService.get<string>('DB_USER', 'postgres'),
+            password: configService.get<string>('DB_PASSWORD', 'postgres'),
+            database: configService.get<string>('DB_NAME', 'proyecto11'),
+          }),
+          autoLoadEntities: true,
+          synchronize: false,
+          ssl: isProduction ? { rejectUnauthorized: false } : false,
+        };
+      },
     }),
 
     // Conexión Global a Cola de Mensajes (Redis)
     BullModule.forRootAsync({
       inject: [ConfigService],
-      useFactory: (configService: ConfigService) => ({
-        connection: {
-          host: configService.get<string>('REDIS_HOST', 'localhost'),
-          port: configService.get<number>('REDIS_PORT', 6379),
-        },
-      }),
+      useFactory: (configService: ConfigService) => {
+        const isProduction = configService.get<string>('NODE_ENV') === 'production';
+        const redisUrl = configService.get<string>('REDIS_URL');
+        
+        // Extraemos partes de la URL manualmente si es Upstash (ya que BullMQ usa ioredis y le gusta tenerlos sueltos a veces, o podemos pasar toda la conexión)
+        // Pero Ioredis puede aceptar un objeto de conexión o simplemente conectarse con un URL predeterminado usando una instancia externa. 
+        // Afortunadamente, pasar la url en un objeto de conexión de bull/ioredis funciona perfecto así:
+        
+        if (redisUrl) {
+          // Usamos la cadena de conexión de forma directa para conectarse con Redis/Upstash TLS
+          return { connection: { url: redisUrl, tls: isProduction ? { rejectUnauthorized: false } : undefined } };
+        }
+
+        return {
+          connection: {
+            host: configService.get<string>('REDIS_HOST', 'localhost'),
+            port: configService.get<number>('REDIS_PORT', 6379),
+          },
+        };
+      },
     }),
 
     // Escudo antispam: Rate Limiting Global
