@@ -6,7 +6,7 @@
   "scripts": {
     "dev:frontend": "npm run dev -w frontend",
     "dev:backend": "npm run start:dev -w backend",
-    "build": "npm run build -w frontend && npm run build -w backend",
+    "build": "npm run build -w @proyecto/shared-types && npm run build -w frontend && npm run build -w backend",
     "lint": "npm run lint -w frontend && npm run lint -w backend",
     "migration:generate": "npx typeorm-ts-node-commonjs migration:generate -d apps/backend/src/database/data-source.ts apps/backend/src/database/migrations/InitBD",
     "migration:run": "npx ts-node --project apps/backend/tsconfig.json apps/backend/scripts/migration-runner.ts run",
@@ -23,6 +23,8 @@
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
-    "@types/jest": "^30.0.0"
+    "@types/jest": "^30.0.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.0.0"
   }
 }

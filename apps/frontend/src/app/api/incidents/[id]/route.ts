@@ -3,6 +3,23 @@ import { getIncident, updateIncident } from '../../_incidentsStore';
 
 const BACKEND_URL = process.env.BACKEND_URL || '';
 
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  if (BACKEND_URL) {
+    const url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/incidentes/${encodeURIComponent(id)}`;
+    const res = await fetch(url);
+    if (!res.ok) {
+      return NextResponse.json({ error: 'not_found' }, { status: 404 });
+    }
+    const data = await res.json();
+    return NextResponse.json(data, { status: res.status });
+  }
+
+  const record = getIncident(id);
+  if (!record) return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  return NextResponse.json(record);
+}
+
 // Mapea los valores del frontend (IncidenteEstado) al enum que espera el backend
 const ESTADO_MAP: Record<string, string> = {
   ABIERTO: 'ABIERTO',
@@ -10,13 +27,13 @@ const ESTADO_MAP: Record<string, string> = {
   CERRADO: 'CERRADO',
 };
 
-//PATCH para actualizar el estado de un incidente (reconocer, resolver, cerrar)
+// PATCH para actualizar el estado de un incidente (reconocer, resolver, cerrar)
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = params;
+  const { id } = await params;
   let body: any;
  
   try {
@@ -27,8 +44,8 @@ export async function PATCH(
  
   if (BACKEND_URL) {
     try {
-      // El backend espera PATCH /incidentes/:id/estado con { estado, usuarioId }
-      const url = `${BACKEND_URL.replace(/\/$/, '')}/incidentes/${encodeURIComponent(id)}/estado`;
+      // El backend espera PATCH /api/v1/incidentes/:id/estado con { estado, usuarioId }
+      const url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/incidentes/${encodeURIComponent(id)}/estado`;
  
       // Determina el estado nuevo a partir del payload del dashboard
       const estadoNuevo =
