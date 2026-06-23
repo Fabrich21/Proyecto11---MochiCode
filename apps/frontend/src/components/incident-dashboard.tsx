@@ -8,7 +8,7 @@ import IncidentDetailModal from './incident-detail-modal';
 import SlaViewer from './sla-viewer';
 
 import { IncidenteEstado } from './incident-types';
-
+/*
 const mockIncidents: Incident[] = [
   {
     id: 'INC-2024-0042',
@@ -84,12 +84,12 @@ const mockIncidents: Incident[] = [
     slaTargetMinutes: 180,
   },
 ];
-
+*/
 export function IncidentDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSeverity, setSelectedSeverity] = useState<string | null>(null);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
-  const [incidents, setIncidents] = useState<Incident[]>(mockIncidents);
+  const [incidents, setIncidents] = useState<Incident[]>([]);;
 
   useEffect(() => {
     if (!selectedIncident) return;
@@ -115,11 +115,11 @@ export function IncidentDashboard() {
         if (!res.ok) throw new Error('fetch_failed');
         const data = await res.json();
         if (!mounted) return;
-        if (Array.isArray(data) && data.length > 0) {
+        if (Array.isArray(data)) {
           setIncidents(data as Incident[]);
         }
       } catch (err) {
-        // Keep mock data as fallback
+        console.error('[incidents] error:', err);
       }
     }
 
@@ -142,6 +142,7 @@ export function IncidentDashboard() {
           body: JSON.stringify(updated),
         });
       } catch (err) {
+        console.error('[incidents] error:', err);
         // ignore network errors for now
       }
     })();
