@@ -6,6 +6,7 @@ import { HistorialEstado } from '../database/entities/historial-estado.entity';
 import { DataSource } from 'typeorm';
 import { IncidenteEstado } from '@proyecto/shared-types';
 import { NotFoundException } from '@nestjs/common';
+import { EventsGateway } from '../events/events.gateway';
 
 describe('IncidentesService', () => {
   let service: IncidentesService;
@@ -42,6 +43,10 @@ describe('IncidentesService', () => {
     createQueryRunner: jest.fn().mockReturnValue(mockQueryRunner),
   };
 
+  const mockEventsGateway = {
+    emitEstadoActualizado: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -57,6 +62,10 @@ describe('IncidentesService', () => {
         {
           provide: DataSource,
           useValue: mockDataSource,
+        },
+        {
+          provide: EventsGateway,
+          useValue: mockEventsGateway,
         },
       ],
     }).compile();
