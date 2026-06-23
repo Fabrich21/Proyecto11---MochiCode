@@ -18,7 +18,8 @@
     "@tailwindcss/postcss": "^4",
     "tailwindcss": "^4",
     "lightningcss": "^1.29.1",
-    "lightningcss-linux-x64-gnu": "^1.29.1"
+    "lightningcss-linux-x64-gnu": "^1.29.1",
+    "@tailwindcss/oxide-linux-x64-gnu": "4.3.0"
   },
   "devDependencies": {
     "@types/node": "^20",
