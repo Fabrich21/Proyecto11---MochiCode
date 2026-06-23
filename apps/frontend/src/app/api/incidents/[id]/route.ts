@@ -31,9 +31,9 @@ const ESTADO_MAP: Record<string, string> = {
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } },
+  { params }: { params: Promise<{ id: string }> },
 ) {
-  const { id } = params;
+  const { id } = await params;
   let body: any;
  
   try {
