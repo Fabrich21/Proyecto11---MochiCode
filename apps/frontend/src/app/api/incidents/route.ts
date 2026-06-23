@@ -37,7 +37,7 @@ function mapBackendToFrontend(inc: any) {
 export async function GET() {
   if (BACKEND_URL) {
     try {
-      const url = `${BACKEND_URL.replace(/\/$/, '')}/incidentes`;
+      const url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/incidentes`;
       const res = await fetch(url, { cache: 'no-store' });
 
       if (!res.ok) {
@@ -66,7 +66,7 @@ export async function GET() {
 export async function POST(request: Request) {
   if (BACKEND_URL) {
     try {
-      const url = `${BACKEND_URL.replace(/\/$/, '')}/incidentes`;
+      const url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/incidentes`;
       const body = await request.text();
       const res = await fetch(url, {
         method: 'POST',
