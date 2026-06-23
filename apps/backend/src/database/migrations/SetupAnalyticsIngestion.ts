@@ -39,8 +39,10 @@ export class SetupAnalyticsIngestion1745634007000 implements MigrationInterface 
     // ==========================================================================
     // COMPRESIÓN automática en TimescaleDB
     // Comprime chunks de eventos_alerta con más de 7 días (ahorro de espacio ~90%)
+    // NOTA: Comentado porque Neon.tech no soporta TimescaleDB
     // ==========================================================================
 
+    /*
     await queryRunner.query(`
       ALTER TABLE "eventos_alerta" SET (
         timescaledb.compress,
@@ -65,23 +67,30 @@ export class SetupAnalyticsIngestion1745634007000 implements MigrationInterface 
     await queryRunner.query(`
       SELECT add_compression_policy('historial_estados', INTERVAL '7 days')
     `);
+    */
 
     // ==========================================================================
     // RETENCIÓN de datos: elimina eventos con más de 90 días automáticamente
+    // NOTA: Comentado porque Neon.tech no soporta TimescaleDB
     // ==========================================================================
 
+    /*
     await queryRunner.query(`
       SELECT add_retention_policy('eventos_alerta', INTERVAL '90 days')
     `);
+    */
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     // Eliminar política de retención
+    /*
     await queryRunner.query(`
       SELECT remove_retention_policy('eventos_alerta', if_exists => true)
     `);
+    */
 
     // Eliminar políticas de compresión
+    /*
     await queryRunner.query(`
       SELECT remove_compression_policy('historial_estados', if_exists => true)
     `);
@@ -89,6 +98,7 @@ export class SetupAnalyticsIngestion1745634007000 implements MigrationInterface 
     await queryRunner.query(`
       SELECT remove_compression_policy('eventos_alerta', if_exists => true)
     `);
+    */
 
     // Eliminar índices
     await queryRunner.query(`DROP INDEX IF EXISTS "IDX_historial_estados_incidente_tiempo"`);
