@@ -8,7 +8,6 @@ import {
 } from 'typeorm';
 import { Sistema } from './sistema.entity';
 import { PoliticaSla } from './politica-sla.entity';
-
 import { IncidenteEstado, IIncidente } from '@proyecto/shared-types';
 
 /**
@@ -63,6 +62,11 @@ export class Incidente implements IIncidente {
 
   @Column({ name: 'fecha_resolucion', type: 'timestamptz', nullable: true })
   fechaResolucion?: Date;
+
+  // FLAG activado por el SlaScheduler cuando el ticket supera el tiempo de la política SLA.
+  // Una vez en TRUE, el cron no vuelve a procesar el mismo incidente.
+  @Column({ name: 'sla_vencido', type: 'boolean', default: false })
+  slaVencido!: boolean;
 
   @Column({ name: 'fecha_limite_resolucion', type: 'timestamptz', nullable: true })
   fechaLimiteResolucion?: Date;

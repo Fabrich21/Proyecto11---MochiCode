@@ -2,13 +2,15 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { BullModule } from '@nestjs/bullmq';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { IngestionModule } from './ingestion/ingestion.module';
 import { WorkerModule } from './worker/worker.module';
-import { IncidentesModule } from './incidentes/incidentes.module'; // <-- Nueva importación
+import { IncidentesModule } from './incidentes/incidentes.module';
+import { SlaModule } from './sla/sla.module';
 import { HttpClientModule } from './common/http-client/http-client.module';
 
 @Module({
@@ -45,6 +47,11 @@ import { HttpClientModule } from './common/http-client/http-client.module';
       }),
     }),
 
+    // Scheduler global (requerido por SlaModule)
+    ScheduleModule.forRoot(),
+
+    // --- MÓDULOS DEL DOMINIO ---
+    HttpClientModule, // Cliente HTTP resiliente para integraciones externas (P6, P9, P12)
     // Escudo antispam: Rate Limiting Global
     ThrottlerModule.forRoot([{
       ttl: 60000, // Una ventana de 60 segundos (1 minuto)
@@ -52,10 +59,10 @@ import { HttpClientModule } from './common/http-client/http-client.module';
     }]),
 
     // --- MÓDULOS DEL DOMINIO ---
-    HttpClientModule, // Cliente global tolerante a fallos para conectarse con P06, P09, P12...
     IngestionModule,  // Capa de entrada: recibe alertas y las encola en Redis
     WorkerModule,     // Capa de procesamiento: desencola desde Redis y persiste en PostgreSQL
-    IncidentesModule, // <-- Capa de lectura: API para el frontend (Filtros y Paginación)
+    IncidentesModule, // Capa de lectura: API para el frontend
+    SlaModule,        // Tarea programada: detecta y procesa vencimientos de SLA cada 5 min
   ],
   controllers: [AppController],
   providers: [

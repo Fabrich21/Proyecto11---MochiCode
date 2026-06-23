@@ -4,7 +4,8 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { IncidentesController } from '../src/incidentes/incidentes.controller';
 import { IncidentesService } from '../src/incidentes/incidentes.service';
-import { Incidente, IncidenteEstado } from '../src/database/entities/incidente.entity';
+import { Incidente } from '../src/database/entities/incidente.entity';
+import { IncidenteEstado } from '@proyecto/shared-types';
 
 /**
  * Tests E2E — GET /api/v1/incidentes
