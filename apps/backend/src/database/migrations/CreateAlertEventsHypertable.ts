@@ -19,10 +19,11 @@ export class CreateAlertEventsHypertable1745634005000 implements MigrationInterf
       )
     `);
 
-    // Convertir a Hypertable de TimescaleDB particionado por tiempo
-    await queryRunner.query(`
-      SELECT create_hypertable('eventos_alerta', 'creado_en')
-    `);
+    // NOTA: Se comenta create_hypertable porque Neon.tech/Render no soportan la extensión TimescaleDB.
+    // La tabla funcionará como una tabla relacional estándar.
+    // await queryRunner.query(`
+    //   SELECT create_hypertable('eventos_alerta', 'creado_en')
+    // `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
