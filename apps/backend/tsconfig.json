@@ -15,5 +15,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "exclude": ["node_modules", "dist", "test", "**/*spec.ts", "jest*.ts", "jest-e2e.config.ts"]
+  "exclude": ["node_modules", "dist", "test", "**/*spec.ts"]
 }
