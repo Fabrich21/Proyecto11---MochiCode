@@ -11,12 +11,10 @@ const ESTADO_MAP: Record<string, string> = {
 };
 
 //PATCH para actualizar el estado de un incidente (reconocer, resolver, cerrar)
-
 export async function PATCH(
-  request: Request,
-  { params }: { params: { id: string } },
-) {
-  const { id } = params;
+  request: Request, 
+  { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   let body: any;
  
   try {
