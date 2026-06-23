@@ -9,6 +9,7 @@ import { PoliticaSla } from '../database/entities/politica-sla.entity';
 import { Incidente } from '../database/entities/incidente.entity';
 import { IncidenteEstado } from '@proyecto/shared-types';
 import { CreateAlertaDto } from '../ingestion/dto/create-alerta.dto';
+import { PayloadNormalizerService } from '../ingestion/normalizer/payload-normalizer.service';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fixtures
@@ -75,6 +76,7 @@ describe('WorkerService', () => {
         { provide: getRepositoryToken(Sistema), useValue: mockSistemaRepo },
         { provide: getRepositoryToken(PoliticaSla), useValue: mockPoliticaSlaRepo },
         { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('mock-uuid-sistema-automatico') } },
+        { provide: PayloadNormalizerService, useValue: { normalize: jest.fn().mockReturnValue({ prioridad: 'CRITICA', estadoSugerido: IncidenteEstado.ABIERTO }) } },
       ],
     }).compile();
 
