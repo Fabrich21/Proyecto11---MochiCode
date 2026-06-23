@@ -10,6 +10,7 @@ import { Incidente } from '../database/entities/incidente.entity';
 import { IncidenteEstado } from '@proyecto/shared-types';
 import { CreateAlertaDto } from '../ingestion/dto/create-alerta.dto';
 import { PayloadNormalizerService } from '../ingestion/normalizer/payload-normalizer.service';
+import { EventsGateway } from '../events/events.gateway';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fixtures
@@ -62,6 +63,12 @@ const mockDataSource = {
 const mockSistemaRepo = { findOne: jest.fn() };
 const mockPoliticaSlaRepo = { findOne: jest.fn() };
 
+const mockEventsGateway = {
+  emitNuevoIncidente: jest.fn(),
+  emitIncidenteActualizado: jest.fn(),
+  emitEstadoActualizado: jest.fn(),
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Suite
 // ─────────────────────────────────────────────────────────────────────────────
@@ -77,6 +84,7 @@ describe('WorkerService', () => {
         { provide: getRepositoryToken(PoliticaSla), useValue: mockPoliticaSlaRepo },
         { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('mock-uuid-sistema-automatico') } },
         { provide: PayloadNormalizerService, useValue: { normalize: jest.fn().mockReturnValue({ prioridad: 'CRITICA', estadoSugerido: IncidenteEstado.ABIERTO }) } },
+        { provide: EventsGateway, useValue: mockEventsGateway },
       ],
     }).compile();
 

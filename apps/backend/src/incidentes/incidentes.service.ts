@@ -6,6 +6,7 @@ import { IncidenteEstado } from '@proyecto/shared-types';
 import { HistorialEstado } from '../database/entities/historial-estado.entity';
 import { GetIncidentesDto } from './dto/get-incidentes.dto';
 import { UpdateEstadoIncidenteDto } from './dto/update-estado-incidente.dto';
+import { EventsGateway } from '../events/events.gateway';
 
 @Injectable()
 export class IncidentesService {
@@ -15,6 +16,7 @@ export class IncidentesService {
     @InjectRepository(HistorialEstado)
     private readonly historialEstadoRepository: Repository<HistorialEstado>,
     private readonly dataSource: DataSource,
+    private readonly eventsGateway: EventsGateway,
   ) {}
 
   async findAll(query: GetIncidentesDto) {
@@ -86,6 +88,10 @@ export class IncidentesService {
       await queryRunner.manager.save(historial);
 
       await queryRunner.commitTransaction();
+
+      // Emitir evento WebSocket del cambio de estado
+      this.eventsGateway.emitEstadoActualizado(incidente.id, updateDto.estado);
+
       return incidenteActualizado;
     } catch (error) {
       await queryRunner.rollbackTransaction();

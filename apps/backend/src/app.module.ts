@@ -12,6 +12,7 @@ import { WorkerModule } from './worker/worker.module';
 import { IncidentesModule } from './incidentes/incidentes.module';
 import { SlaModule } from './sla/sla.module';
 import { HttpClientModule } from './common/http-client/http-client.module';
+import { EventsModule } from './events/events.module';
 
 @Module({
   imports: [
@@ -85,6 +86,7 @@ import { HttpClientModule } from './common/http-client/http-client.module';
     WorkerModule,     // Capa de procesamiento: desencola desde Redis y persiste en PostgreSQL
     IncidentesModule, // Capa de lectura: API para el frontend
     SlaModule,        // Tarea programada: detecta y procesa vencimientos de SLA cada 5 min
+    EventsModule,     // WebSockets Gateway
   ],
   controllers: [AppController],
   providers: [
