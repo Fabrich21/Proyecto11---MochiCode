@@ -11,6 +11,7 @@ import { PoliticaSla } from '../database/entities/politica-sla.entity';
 import { Incidente } from '../database/entities/incidente.entity';
 import { IncidenteEstado } from '@proyecto/shared-types';
 import { CreateAlertaDto } from '../ingestion/dto/create-alerta.dto';
+import { PayloadNormalizerService } from '../ingestion/normalizer/payload-normalizer.service';
 import { SlaUtil } from '../common/utils/sla.util';
 import { PriorityRulesEngine } from '../common/utils/priority-rules.engine';
 
@@ -20,16 +21,16 @@ export class WorkerService {
   private readonly sistemaAutomaticoUuid: string;
 
   constructor(
-    // DataSource nos da control total sobre transacciones (QueryRunner)
     private readonly dataSource: DataSource,
 
-    // Repositorios para consultas de lectura previas a la transacción
     @InjectRepository(Sistema)
     private readonly sistemaRepo: Repository<Sistema>,
 
     @InjectRepository(PoliticaSla)
     private readonly politicaSlaRepo: Repository<PoliticaSla>,
 
+    private readonly normalizerService: PayloadNormalizerService,
+     
     private readonly configService: ConfigService,
   ) {
     // Obtenemos el UUID desde las variables de entorno, usando el quemado como fallback por seguridad
@@ -54,8 +55,15 @@ export class WorkerService {
     this.logger.log(`Procesando alerta del sistema: ${dto.sistema_id}`);
 
     // -----------------------------------------------------------------------
+    // PASO 0: Normalizar el payload externo al esquema interno.
+    // -----------------------------------------------------------------------
+    const normalizado = this.normalizerService.normalize(dto);
+    this.logger.debug(
+      `Normalizado — prioridad: ${normalizado.prioridad} | estado sugerido: ${normalizado.estadoSugerido}`,
+    );
+
+    // -----------------------------------------------------------------------
     // PASO 1: Validar que el sistema emisor esté registrado en BD.
-    // Si no existe, lanzamos error para que BullMQ reintente el job.
     // -----------------------------------------------------------------------
     const sistema = await this.sistemaRepo.findOne({
       where: { sistemaId: dto.sistema_id },
@@ -151,18 +159,19 @@ export class WorkerService {
         );
 
         const nuevoIncidente = incidenteRepo.create({
-          titulo,
-          descripcion,
-          estado: IncidenteEstado.ABIERTO,
-          sistemaId: dto.sistema_id,
-          creadorUsuarioId: this.sistemaAutomaticoUuid,
-          politicaSlaId: politicaSla.id,
-          prioridad: prioridadCalculada,
-          creadoEn: fechaCreacion,
-          fechaLimiteResolucion,
+           titulo: `[${dto.sistema_id}] Alerta automática — ${fechaCreacion.toISOString()}`,
+           descripcion: `Payload inicial: ${JSON.stringify(dto.payload)}`,
+           estado: IncidenteEstado.ABIERTO,
+           prioridad: prioridadCalculada,
+           sistemaId: dto.sistema_id,
+           creadorUsuarioId: this.sistemaAutomaticoUuid,
+           politicaSlaId: politicaSla.id,
+           fechaLimiteResolucion,
         });
         const incidenteGuardado = await incidenteRepo.save(nuevoIncidente);
-        incidenteId = incidenteGuardado.id;
+        incidenteId = Array.isArray(incidenteGuardado)
+          ? incidenteGuardado[0].id
+          : incidenteGuardado.id;
 
         // 3c. Registrar el estado inicial en historial_estados (hypertable).
         // estado_anterior = NULL porque el incidente nace directamente como ABIERTO.

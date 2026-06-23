@@ -9,7 +9,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     const url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/incidentes/${encodeURIComponent(id)}`;
     const res = await fetch(url);
     if (!res.ok) {
-      // Si el backend no tiene el endpoint GET /id, regresamos not_found
       return NextResponse.json({ error: 'not_found' }, { status: 404 });
     }
     const data = await res.json();
@@ -21,40 +20,74 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   return NextResponse.json(record);
 }
 
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+// Mapea los valores del frontend (IncidenteEstado) al enum que espera el backend
+const ESTADO_MAP: Record<string, string> = {
+  ABIERTO: 'ABIERTO',
+  EN_PROGRESO: 'EN_PROGRESO',
+  CERRADO: 'CERRADO',
+};
+
+// PATCH para actualizar el estado de un incidente (reconocer, resolver, cerrar)
+
+export async function PATCH(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
   const { id } = await params;
-  if (BACKEND_URL) {
-    const url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/incidentes/${encodeURIComponent(id)}/estado`;
-    
-    // El frontend envía { incidentStatus: '...' }, el backend espera { estado: '...', usuario_id: '...' }
-    let patch;
-    try {
-      patch = await request.json();
-    } catch {
-      patch = {};
-    }
-    
-    const backendPayload = {
-      estado: patch.incidentStatus || 'ABIERTO',
-      usuario_id: '00000000-0000-0000-0000-000000000001' // UUID temporal del sistema
-    };
-
-    const res = await fetch(url, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(backendPayload),
-    });
-    
-    const data = await res.json();
-    return NextResponse.json(data, { status: res.status });
-  }
-
+  let body: any;
+ 
   try {
-    const patch = await request.json();
-    const updated = updateIncident(id, patch);
-    if (!updated) return NextResponse.json({ error: 'not_found' }, { status: 404 });
-    return NextResponse.json(updated);
+    body = await request.json();
   } catch {
     return NextResponse.json({ error: 'invalid_payload' }, { status: 400 });
   }
+ 
+  if (BACKEND_URL) {
+    try {
+      // El backend espera PATCH /api/v1/incidentes/:id/estado con { estado, usuarioId }
+      const url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/incidentes/${encodeURIComponent(id)}/estado`;
+ 
+      // Determina el estado nuevo a partir del payload del dashboard
+      const estadoNuevo =
+        ESTADO_MAP[body.incidentStatus] ??
+        (body.resolvedAt || body.closedAt ? 'CERRADO' : 'EN_PROGRESO');
+ 
+      const res = await fetch(url, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          estado: estadoNuevo,
+          // TODO: reemplazar por el JWT.sub cuando P12 (Zero Trust) esté integrado
+          usuarioId: '00000000-0000-0000-0000-000000000001',
+        }),
+      });
+ 
+      if (!res.ok) {
+        const err = await res.text();
+        console.error(`[PATCH /api/incidents/${id}] Backend respondió ${res.status}:`, err);
+        return NextResponse.json({ error: 'backend_error' }, { status: res.status });
+      }
+ 
+      const data = await res.json();
+      return NextResponse.json(data, { status: 200 });
+    } catch (err) {
+      console.error(`[PATCH /api/incidents/${id}] Error de red:`, err);
+      return NextResponse.json({ error: 'connection_failed' }, { status: 502 });
+    }
+  }
+ 
+  // Fallback mock — actualiza el store en memoria
+  const updated = updateIncident(id, {
+    incidentStatus: body.incidentStatus,
+    acknowledgedAt: body.acknowledgedAt,
+    resolvedAt: body.resolvedAt,
+    closedAt: body.closedAt,
+  });
+ 
+  if (!updated) {
+    return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  }
+ 
+  return NextResponse.json(updated, { status: 200 });
 }
+ 

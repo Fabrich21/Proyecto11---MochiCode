@@ -4,7 +4,7 @@ import axiosRetry from 'axios-retry';
 
 /**
  * Módulo global de cliente HTTP.
- * Sirve como un wrapper resiliente: cualquier servicio del backend que 
+ * Sirve como un wrapper resiliente: cualquier servicio del backend que
  * importe HttpService usará esta misma configuración con reintentos automáticos.
  */
 @Global()
@@ -29,7 +29,7 @@ export class HttpClientModule implements OnModuleInit {
     // Le inyectamos la lógica de tolerancia a fallos
     axiosRetry(axiosInstance, {
       retries: 3, // 3 intentos antes de rendirnos definitivamente
-      
+
       // Retardo exponencial: espera 1s, luego 2s, luego 4s...
       retryDelay: (retryCount) => {
         this.logger.warn(`Intento HTTP fallido. Reintentando por ${retryCount}ª vez...`);
@@ -41,11 +41,11 @@ export class HttpClientModule implements OnModuleInit {
         const isNetworkOr5xxError = axiosRetry.isNetworkOrIdempotentRequestError(error);
         const statusCode = error.response?.status;
         const isRateLimit = statusCode === 429;
-        
+
         if (isNetworkOr5xxError || isRateLimit) {
           return true;
         }
-        
+
         // Si es un 400 (Bad Request) o 401 (Auth), no tiene sentido reintentar
         return false;
       },

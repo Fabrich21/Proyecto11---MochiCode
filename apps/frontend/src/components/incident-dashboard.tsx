@@ -7,7 +7,7 @@ import { Incident } from './incident-types';
 import IncidentDetailModal from './incident-detail-modal';
 import SlaViewer from './sla-viewer';
 
-import { IncidenteEstado } from '@proyecto/shared-types';
+import { IncidenteEstado } from './incident-types';
 
 const mockIncidents: Incident[] = [
   {
