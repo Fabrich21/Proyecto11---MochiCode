@@ -16,7 +16,7 @@ import { IncidenteEstado, IIncidente } from '@proyecto/shared-types';
  * procesa una alerta y no puede ser eliminado (solo cambia de estado).
  */
 @Entity('incidentes')
-export class Incidente {
+export class Incidente implements IIncidente {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
@@ -67,6 +67,9 @@ export class Incidente {
   // Una vez en TRUE, el cron no vuelve a procesar el mismo incidente.
   @Column({ name: 'sla_vencido', type: 'boolean', default: false })
   slaVencido!: boolean;
+
+  @Column({ name: 'fecha_limite_resolucion', type: 'timestamptz', nullable: true })
+  fechaLimiteResolucion?: Date;
 
   // Relaciones para joins opcionales (lazy loading desactivado por defecto)
   @ManyToOne(() => Sistema)

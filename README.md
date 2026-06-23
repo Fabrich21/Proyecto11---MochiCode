@@ -58,6 +58,17 @@ npm run dev:frontend
 - Frontend: http://localhost:3000
 - API Health: http://localhost:3001/api/health
 
+> [!WARNING]
+> **Modificación de Tipos Compartidos (`@proyecto/shared-types`)**
+> Si en algún momento modificas las interfaces o tipos dentro de `packages/shared-types/src`, debes compilar el paquete para que el backend y frontend reconozcan los cambios.
+> 
+> Para hacerlo, ejecuta:
+> ```bash
+> cd packages/shared-types
+> npm run build
+> ```
+> *(Esto actualizará la carpeta `dist/` con las declaraciones de TypeScript. Si no lo haces, obtendrás el error `Cannot find module '@proyecto/shared-types'` al levantar el servidor).*
+
 ## Build
 
 ```bash
@@ -157,7 +168,7 @@ erDiagram
 
 ## 📚 Referencia de la API
 
-Todas las peticiones deben dirigirse a la ruta base `/api` (ej. `http://localhost:3001/api`).
+Todas las peticiones principales de la API deben dirigirse a la ruta base `/api/v1` (ej. `http://localhost:3001/api/v1`).
 
 ### 1. Operaciones (DevOps / Infraestructura)
 Verifica el estado de salud del backend y sus conexiones internas. Ideal para los *Healthchecks* de Docker.
@@ -173,7 +184,7 @@ Verifica el estado de salud del backend y sus conexiones internas. Ideal para lo
 ### 2. Ingesta (Sistemas Externos: P1, P2, P8)
 El sistema utiliza Redis para encolar alertas masivas de forma asíncrona, protegiendo la base de datos principal. Los sistemas externos deben utilizar este endpoint para reportar incidentes.
 
-**Endpoint:** `POST /ingestion/alertas`
+**Endpoint:** `POST /api/v1/alertas`
 
 **Headers Requeridos:**
 - `Content-Type: application/json`
@@ -185,6 +196,7 @@ El sistema emisor debe enviar un JSON con la siguiente estructura estricta:
 ```json
 {
   "sistema_id": "P8", 
+  "creado_en": "2026-05-26T15:30:00Z",
   "payload": {
     "sensor_id": "termometro-bodega-norte",
     "temperatura": 85.5,
@@ -193,7 +205,7 @@ El sistema emisor debe enviar un JSON con la siguiente estructura estricta:
   }
 }
 ```
-*Nota: Cualquier campo fuera de `sistema_id` y `payload` en el nivel raíz será rechazado automáticamente por el servidor (Error 400).*
+*Nota: Cualquier campo fuera de `sistema_id`, `creado_en` y `payload` en el nivel raíz será rechazado automáticamente por el servidor (Error 400).*
 
 **Respuestas Esperadas:**
 - ✅ **202 Accepted:** La alerta fue recibida y encolada exitosamente.
@@ -206,7 +218,7 @@ El sistema emisor debe enviar un JSON con la siguiente estructura estricta:
 ### 3. Incidentes (Frontend UI)
 Obtiene la lista de incidentes persistidos en PostgreSQL. Este endpoint retorna meta-información matemática para facilitar la renderización de tablas y la paginación en la interfaz de usuario.
 
-**Endpoint:** `GET /incidentes`
+**Endpoint:** `GET /api/v1/incidentes`
 
 #### Parámetros de Consulta (Query Params - Opcionales)
 | Parámetro | Tipo | Default | Descripción |
@@ -218,7 +230,7 @@ Obtiene la lista de incidentes persistidos en PostgreSQL. Este endpoint retorna 
 | `orden` | `string` | `DESC` | Ordenamiento por fecha de creación (`ASC` o `DESC`). |
 
 #### Ejemplo de Petición
-`GET /incidentes?page=1&limit=5&estado=ABIERTO&orden=DESC`
+`GET /api/v1/incidentes?page=1&limit=5&estado=ABIERTO&orden=DESC`
 
 #### Respuesta Exitosa (200 OK)
 ```json
@@ -282,8 +294,6 @@ POST /ingestion/alertas
 ### Nota sobre `creador_usuario_id`
 
 Los incidentes generados automáticamente usan el UUID centinela `00000000-0000-0000-0000-000000000001` como actor sistema. Este valor debe ser reemplazado por el `JWT.sub` de P12 cuando la integración de autenticación esté completa.
-
-Aquí tienes el diseño de los endpoints formateado en Markdown, listo para que lo copies y pegues directamente en tu archivo `README.md`:
 
 ## 🔌 Arquitectura de Integración (API RESTful)
 

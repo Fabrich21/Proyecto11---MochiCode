@@ -18,6 +18,7 @@ export interface IIncidente {
   prioridad: string;
   fechaResolucion?: Date;
   slaVencido: boolean;
+  fechaLimiteResolucion?: Date;
 }
 
 export interface IUpdateEstadoIncidenteDto {

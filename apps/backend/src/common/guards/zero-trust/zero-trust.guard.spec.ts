@@ -18,7 +18,16 @@ describe('ZeroTrustGuard', () => {
     }) as ExecutionContext;
 
   beforeEach(() => {
-    guard = new ZeroTrustGuard();
+    const mockConfigService = {
+      get: (key: string) => {
+        if (key.startsWith('API_KEY_P') && key !== 'API_KEY_P99') {
+          const sys = key.split('_')[2];
+          return `auth_${sys.toLowerCase()}_secret`;
+        }
+        return null;
+      }
+    };
+    guard = new ZeroTrustGuard(mockConfigService as any);
   });
 
   it('should be defined', () => {
@@ -74,6 +83,13 @@ describe('ZeroTrustGuard', () => {
     it('should throw UnauthorizedException when sistema_id is missing from body', () => {
       // Arrange
       const ctx = buildContext('auth_p1_secret', undefined);
+      // Act & Assert
+      expect(() => guard.canActivate(ctx)).toThrow(UnauthorizedException);
+    });
+
+    it('should throw UnauthorizedException when sistema_id is not a string (DoS protection)', () => {
+      // Arrange - Simulating an attacker sending an object to cause a TypeError on .toUpperCase()
+      const ctx = buildContext('auth_p1_secret', { inyeccion: true } as any);
       // Act & Assert
       expect(() => guard.canActivate(ctx)).toThrow(UnauthorizedException);
     });

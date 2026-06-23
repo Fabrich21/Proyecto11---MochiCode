@@ -18,16 +18,17 @@ export const options = {
 
 // 2. El código que ejecutará cada Usuario Virtual (VU) repetidamente
 export default function () {
-  const url = 'http://localhost:3001/api/ingestion/alertas';
+  const url = 'http://localhost:3001/api/v1/alertas';
 
   // Seguridad Zero Trust: Leemos la llave desde la consola, NUNCA quemada en el código.
   const apiKey = __ENV.API_KEY || 'auth_p8_secret';
 
-  // Armamos el Payload estricto que exige tu backend
+// Armamos el Payload estricto que exige tu backend (Actualizado al nuevo contrato)
   const payload = JSON.stringify({
-    sistema_id: 'P8',
+    sistema_id: 'P08',
+    creado_en: new Date().toISOString(), // <-- ¡Nueva línea agregada!
     payload: {
-      sensor_id: `k6-stress-sensor-${__VU}-${__ITER}`, // Identificador único de prueba
+      sensor_id: `k6-stress-sensor-${__VU}-${__ITER}`, 
       temperatura: 90.5 + Math.random() * 10,
       estado: 'stress_test'
     }

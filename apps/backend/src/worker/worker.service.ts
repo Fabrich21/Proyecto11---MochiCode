@@ -12,17 +12,13 @@ import { Incidente } from '../database/entities/incidente.entity';
 import { IncidenteEstado } from '@proyecto/shared-types';
 import { CreateAlertaDto } from '../ingestion/dto/create-alerta.dto';
 import { PayloadNormalizerService } from '../ingestion/normalizer/payload-normalizer.service';
-
-/**
- * UUID centinela para incidentes generados automáticamente por el sistema.
- * Representa al "actor sistema" cuando no hay un usuario humano que cree el ticket.
- * TODO: reemplazar por JWT.sub de P12 cuando la integración de auth esté completa.
- */
-const SISTEMA_AUTOMATICO_UUID = '00000000-0000-0000-0000-000000000001';
+import { SlaUtil } from '../common/utils/sla.util';
+import { PriorityRulesEngine } from '../common/utils/priority-rules.engine';
 
 @Injectable()
 export class WorkerService {
   private readonly logger = new Logger(WorkerService.name);
+  private readonly sistemaAutomaticoUuid: string;
 
   constructor(
     private readonly dataSource: DataSource,
@@ -34,7 +30,15 @@ export class WorkerService {
     private readonly politicaSlaRepo: Repository<PoliticaSla>,
 
     private readonly normalizerService: PayloadNormalizerService,
-  ) {}
+     
+    private readonly configService: ConfigService,
+  ) {
+    // Obtenemos el UUID desde las variables de entorno, usando el quemado como fallback por seguridad
+    this.sistemaAutomaticoUuid = this.configService.get<string>(
+      'SISTEMA_AUTOMATICO_UUID',
+      '00000000-0000-0000-0000-000000000001',
+    )!;
+  }
 
   /**
    * Método principal invocado por el Processor.
@@ -73,23 +77,23 @@ export class WorkerService {
     }
 
     // -----------------------------------------------------------------------
-    // PASO 2: Seleccionar política SLA según la prioridad normalizada.
-    // Busca por nombre que contenga la prioridad (ej. "SLA Crítica").
-    // Fallback: política más restrictiva si no hay coincidencia.
+    // PASO 2: Buscar la política SLA según prioridad.
+    // El Motor de Reglas asigna la criticidad basado en el origen del webhook,
+    // sobreescribiendo incondicionalmente cualquier prioridad del payload.
     // -----------------------------------------------------------------------
-    const politicaPorPrioridad = await this.politicaSlaRepo
-      .createQueryBuilder('sla')
-      .where('UPPER(sla.nombre) LIKE :prioridad', {
-        prioridad: `%${normalizado.prioridad}%`,
-      })
-      .getOne();
+    const prioridadCalculada = PriorityRulesEngine.calcularPrioridad(dto.sistema_id, dto.payload);
+    
+    let politicaSla = await this.politicaSlaRepo.findOne({
+      where: { nombre: prioridadCalculada },
+    });
 
-    const politicaSla =
-      politicaPorPrioridad ??
-      (await this.politicaSlaRepo.findOne({
+    if (!politicaSla) {
+      this.logger.warn(`Política SLA para prioridad "${prioridadCalculada}" no encontrada. Usando la más restrictiva por defecto.`);
+      politicaSla = await this.politicaSlaRepo.findOne({
         where: {},
         order: { tiempoMaximoResolucionMinutos: 'ASC' },
-      }));
+      });
+    }
 
     if (!politicaSla) {
       throw new NotFoundException(
@@ -137,22 +141,32 @@ export class WorkerService {
            VALUES (gen_random_uuid(), $1, $2, $3, now())`,
           [
             incidenteId,                                                         // $1
-            SISTEMA_AUTOMATICO_UUID,                                             // $2
+            this.sistemaAutomaticoUuid,                                          // $2
             `Nueva alerta recibida desde ${dto.sistema_id} en incidente activo`, // $3
           ],
         );
       } else {
         // ── RAMA B: no hay ticket activo → crear uno nuevo ───────────────────
 
-        // 3b. Insertar el incidente principal con datos normalizados
+        // 3b. Insertar el incidente principal
+        const fechaCreacion = new Date();
+        const titulo = `[${dto.sistema_id}] Alerta automática — ${fechaCreacion.toISOString()}`;
+        const descripcion = `Payload inicial: ${JSON.stringify(dto.payload)}`;
+
+        const fechaLimiteResolucion = SlaUtil.calcularFechaLimiteResolucion(
+          fechaCreacion,
+          politicaSla.tiempoMaximoResolucionMinutos
+        );
+
         const nuevoIncidente = incidenteRepo.create({
-          titulo: normalizado.titulo,
-          descripcion: normalizado.descripcion,
-          estado: normalizado.estadoSugerido,
-          prioridad: normalizado.prioridad,
-          sistemaId: dto.sistema_id,
-          creadorUsuarioId: SISTEMA_AUTOMATICO_UUID,
-          politicaSlaId: politicaSla.id,
+           titulo: `[${dto.sistema_id}] Alerta automática — ${fechaCreacion.toISOString()}`,
+           descripcion: `Payload inicial: ${JSON.stringify(dto.payload)}`,
+           estado: IncidenteEstado.ABIERTO,
+           prioridad: prioridadCalculada,
+           sistemaId: dto.sistema_id,
+           creadorUsuarioId: this.sistemaAutomaticoUuid,
+           politicaSlaId: politicaSla.id,
+           fechaLimiteResolucion,
         });
         const incidenteGuardado = await incidenteRepo.save(nuevoIncidente);
         incidenteId = Array.isArray(incidenteGuardado)
@@ -170,8 +184,8 @@ export class WorkerService {
            VALUES (gen_random_uuid(), $1, NULL, $2, $3, now())`,
           [
             incidenteId,               // $1 — FK al incidente recién creado
-            IncidenteEstado.ABIERTO,   // $2 — primer estado registrado
-            SISTEMA_AUTOMATICO_UUID,   // $3 — actor: sistema automático
+            IncidenteEstado.ABIERTO,      // $2 — primer estado registrado
+            this.sistemaAutomaticoUuid,   // $3 — actor: sistema automático
           ],
         );
 
@@ -182,7 +196,7 @@ export class WorkerService {
            VALUES (gen_random_uuid(), $1, $2, $3, now())`,
           [
             incidenteId,                                                                  // $1
-            SISTEMA_AUTOMATICO_UUID,                                                      // $2
+            this.sistemaAutomaticoUuid,                                                   // $2
             `Incidente creado automáticamente por alerta de ${dto.sistema_id}`,           // $3
           ],
         );

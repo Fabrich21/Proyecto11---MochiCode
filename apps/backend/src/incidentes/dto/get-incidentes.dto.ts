@@ -1,8 +1,8 @@
 import { IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
 import { Type } from 'class-transformer';
-import { IncidenteEstado } from '@proyecto/shared-types';
+import { IncidenteEstado, IGetIncidentesDto } from '@proyecto/shared-types';
 
-export class GetIncidentesDto {
+export class GetIncidentesDto implements IGetIncidentesDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
