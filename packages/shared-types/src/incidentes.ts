@@ -2,6 +2,7 @@ export enum IncidenteEstado {
   ABIERTO = 'ABIERTO',
   EN_PROGRESO = 'EN_PROGRESO',
   CERRADO = 'CERRADO',
+  VENCIDO = 'VENCIDO',
 }
 
 export interface IIncidente {
@@ -16,6 +17,8 @@ export interface IIncidente {
   asignadoAUsuarioId?: string;
   prioridad: string;
   fechaResolucion?: Date;
+  slaVencido: boolean;
+  fechaLimiteResolucion?: Date;
 }
 
 export interface IUpdateEstadoIncidenteDto {

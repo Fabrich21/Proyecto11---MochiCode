@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { WorkerService } from './worker.service';
@@ -73,6 +74,7 @@ describe('WorkerService', () => {
         { provide: DataSource, useValue: mockDataSource },
         { provide: getRepositoryToken(Sistema), useValue: mockSistemaRepo },
         { provide: getRepositoryToken(PoliticaSla), useValue: mockPoliticaSlaRepo },
+        { provide: ConfigService, useValue: { get: jest.fn().mockReturnValue('mock-uuid-sistema-automatico') } },
       ],
     }).compile();
 
