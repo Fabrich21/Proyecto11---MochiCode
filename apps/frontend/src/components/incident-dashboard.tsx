@@ -21,8 +21,9 @@ function mapBackendIncident(backendIncidente: any): Incident {
 
   return {
     id: backendIncidente.id,
+    title: backendIncidente.titulo || `Incidente ${backendIncidente.id}`,
     severity: (prioridadMap[backendIncidente.prioridad] || 'medium') as any,
-    system: backendIncidente.sistemaId,
+    system: backendIncidente.sistemaId || backendIncidente.sistema_id || 'Desconocido',
     description: backendIncidente.descripcion || backendIncidente.titulo || 'Sin descripción',
     slaRemaining: backendIncidente.tiempoSlaMinutos || 60,
     slaPercentage: 0,
