@@ -82,7 +82,9 @@ export function IncidentCard({ incident, onClick }: IncidentCardProps) {
               <span className="text-xs text-[#353535]">{timeAgoText}</span>
             </div>
 
-            <h3 className="font-semibold text-[#353535] mb-1">{incident.system}</h3>
+            <h3 className="font-semibold text-[#353535] mb-1">
+              {incident.title ? `${incident.system} - ${incident.title}` : incident.system}
+            </h3>
             <p className="text-sm text-[#353535] line-clamp-2">{incident.description}</p>
           </button>
 

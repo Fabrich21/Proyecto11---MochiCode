@@ -10,6 +10,7 @@ export type IncidentStatus = IncidenteEstado;
 
 export interface Incident {
   id: string;
+  title?: string;
   severity: IncidentSeverity;
   system: string;
   description: string;
