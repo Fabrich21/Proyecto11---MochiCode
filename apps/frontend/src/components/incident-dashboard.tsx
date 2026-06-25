@@ -6,9 +6,31 @@ import { IncidentCard } from './incident-card';
 import { Incident } from './incident-types';
 import IncidentDetailModal from './incident-detail-modal';
 import SlaViewer from './sla-viewer';
+import { useWebSockets } from '../hooks/useWebSockets';
 
 import { IncidenteEstado } from './incident-types';
-/*
+
+// Helper para mapear el formato del backend al frontend
+function mapBackendIncident(backendIncidente: any): Incident {
+  const prioridadMap: Record<string, string> = {
+    CRITICA: 'critical',
+    ALTA: 'high',
+    MEDIA: 'medium',
+    BAJA: 'medium', // Fallback visual
+  };
+
+  return {
+    id: backendIncidente.id,
+    severity: (prioridadMap[backendIncidente.prioridad] || 'medium') as any,
+    system: backendIncidente.sistemaId,
+    description: backendIncidente.descripcion || backendIncidente.titulo || 'Sin descripción',
+    slaRemaining: backendIncidente.tiempoSlaMinutos || 60,
+    slaPercentage: 0,
+    createdAt: backendIncidente.creadoEn || new Date(),
+    incidentStatus: backendIncidente.estado || IncidenteEstado.ABIERTO,
+  };
+}
+
 const mockIncidents: Incident[] = [
   {
     id: 'INC-2024-0042',
@@ -89,7 +111,27 @@ export function IncidentDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSeverity, setSelectedSeverity] = useState<string | null>(null);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
-  const [incidents, setIncidents] = useState<Incident[]>([]);;
+  const [incidents, setIncidents] = useState<Incident[]>(mockIncidents);
+
+  // Hook de WebSockets para actualizaciones en tiempo real
+  const { isConnected } = useWebSockets({
+    room: 'dashboard_incidentes',
+    onNuevoIncidente: (incidenteBackend) => {
+      console.log('Nuevo incidente recibido vía WS:', incidenteBackend);
+      const newIncident = mapBackendIncident(incidenteBackend);
+      setIncidents((prev) => [newIncident, ...prev]);
+    },
+    onEstadoActualizado: ({ incidenteId, nuevoEstado }) => {
+      console.log('Cambio de estado recibido vía WS:', incidenteId, nuevoEstado);
+      setIncidents((prev) =>
+        prev.map((i) => (i.id === incidenteId ? { ...i, incidentStatus: nuevoEstado } : i))
+      );
+    },
+    onIncidenteActualizado: ({ incidenteId, nuevo_evento }) => {
+      console.log('Incidente actualizado (evento agregado) vía WS:', incidenteId);
+      // Opcional: podrías mostrar una notificación visual aquí
+    },
+  });
 
   useEffect(() => {
     if (!selectedIncident) return;
@@ -115,8 +157,13 @@ export function IncidentDashboard() {
         if (!res.ok) throw new Error('fetch_failed');
         const data = await res.json();
         if (!mounted) return;
-        if (Array.isArray(data)) {
-          setIncidents(data as Incident[]);
+        
+        // Si el backend devuelve { data: [...] } (paginación) o un array directo
+        const items = data.data && Array.isArray(data.data) ? data.data : (Array.isArray(data) ? data : []);
+        
+        if (items.length > 0) {
+          const mapped = items.map(mapBackendIncident);
+          setIncidents(mapped);
         }
       } catch (err) {
         console.error('[incidents] error:', err);
@@ -207,6 +254,16 @@ export function IncidentDashboard() {
             <option value="high">Altos</option>
             <option value="medium">Medios</option>
           </select>
+          
+          <div className="flex items-center gap-2 px-3 rounded-lg border border-border bg-white shadow-sm">
+            <span className="relative flex h-3 w-3">
+              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></span>
+              <span className={`relative inline-flex rounded-full h-3 w-3 ${isConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
+            </span>
+            <span className="text-sm font-medium text-foreground/70">
+              {isConnected ? 'Live' : 'Desconectado'}
+            </span>
+          </div>
         </div>
       </div>
 

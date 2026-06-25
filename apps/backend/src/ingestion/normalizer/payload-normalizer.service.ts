@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { CreateAlertaDto } from '../dto/create-alerta.dto';
 import { NormalizedAlerta } from '../dto/normalized-alerta.dto';
 import { normalizeP9Grupo9 } from './strategies/p9-grupo9.strategy';
+import { normalizeP07 } from './strategies/p07.strategy';
 import { normalizeDefault } from './strategies/default.strategy';
 
 /**
@@ -28,6 +29,7 @@ export class PayloadNormalizerService {
     // Grupo 9 — Analítica
     // Formato: { source, event_type, payload: { incident_id, severity, status, ... } }
     P9: normalizeP9Grupo9,
+    P07: normalizeP07,
   };
 
   /**

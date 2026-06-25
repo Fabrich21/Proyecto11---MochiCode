@@ -14,6 +14,7 @@ import { CreateAlertaDto } from '../ingestion/dto/create-alerta.dto';
 import { PayloadNormalizerService } from '../ingestion/normalizer/payload-normalizer.service';
 import { SlaUtil } from '../common/utils/sla.util';
 import { PriorityRulesEngine } from '../common/utils/priority-rules.engine';
+import { EventsGateway } from '../events/events.gateway';
 
 @Injectable()
 export class WorkerService {
@@ -32,6 +33,8 @@ export class WorkerService {
     private readonly normalizerService: PayloadNormalizerService,
      
     private readonly configService: ConfigService,
+
+    private readonly eventsGateway: EventsGateway,
   ) {
     // Obtenemos el UUID desde las variables de entorno, usando el quemado como fallback por seguridad
     this.sistemaAutomaticoUuid = this.configService.get<string>(
@@ -81,7 +84,7 @@ export class WorkerService {
     // El Motor de Reglas asigna la criticidad basado en el origen del webhook,
     // sobreescribiendo incondicionalmente cualquier prioridad del payload.
     // -----------------------------------------------------------------------
-    const prioridadCalculada = PriorityRulesEngine.calcularPrioridad(dto.sistema_id, dto.payload);
+    const prioridadCalculada = PriorityRulesEngine.calcularPrioridad(dto.sistema_id, normalizado.prioridad);
     
     let politicaSla = await this.politicaSlaRepo.findOne({
       where: { nombre: prioridadCalculada },
@@ -145,6 +148,12 @@ export class WorkerService {
             `Nueva alerta recibida desde ${dto.sistema_id} en incidente activo`, // $3
           ],
         );
+
+        // Emitir evento WebSocket para actualizar en tiempo real
+        this.eventsGateway.emitIncidenteActualizado(incidenteId, {
+          sistema_origen: dto.sistema_id,
+          nuevo_evento: dto.payload,
+        });
       } else {
         // ── RAMA B: no hay ticket activo → crear uno nuevo ───────────────────
 
@@ -202,6 +211,9 @@ export class WorkerService {
         );
 
         this.logger.log(`Nuevo incidente creado con ID: ${incidenteId}`);
+
+        // Emitir evento WebSocket del nuevo ticket
+        this.eventsGateway.emitNuevoIncidente(incidenteGuardado);
       }
 
       // --- 3e. INSERT evento_alerta (siempre, tanto en rama A como B) ---
