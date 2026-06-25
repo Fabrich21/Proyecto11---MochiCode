@@ -21,7 +21,7 @@ function mapBackendIncident(backendIncidente: any): Incident {
 
   return {
     id: backendIncidente.id,
-    title: backendIncidente.titulo || `Incidente ${backendIncidente.id}`,
+    title: backendIncidente.titulo || backendIncidente.descripcion || 'Sin título',
     severity: (prioridadMap[backendIncidente.prioridad] || 'medium') as any,
     system: backendIncidente.sistemaId || backendIncidente.sistema_id || 'Desconocido',
     description: backendIncidente.descripcion || backendIncidente.titulo || 'Sin descripción',
@@ -32,7 +32,7 @@ function mapBackendIncident(backendIncidente: any): Incident {
   };
 }
 
-const mockIncidents: Incident[] = [
+/*const mockIncidents: Incident[] = [
   {
     id: 'INC-2024-0042',
     severity: 'critical',
@@ -112,7 +112,7 @@ export function IncidentDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSeverity, setSelectedSeverity] = useState<string | null>(null);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
-  const [incidents, setIncidents] = useState<Incident[]>(mockIncidents);
+  const [incidents, setIncidents] = useState<Incident[]>([]);
 
   // Hook de WebSockets para actualizaciones en tiempo real
   const { isConnected } = useWebSockets({
