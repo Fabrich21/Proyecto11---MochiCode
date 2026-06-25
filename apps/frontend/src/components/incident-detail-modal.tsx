@@ -29,7 +29,7 @@ export function IncidentDetailModal({ incident, onClose, onAcknowledge, onResolv
             <div>
               <p className="text-xs uppercase tracking-wide text-foreground/50">Detalle de incidente</p>
               <h3 id="incident-detail-title" className="mt-1 text-xl font-bold text-foreground">
-                {incident.id}
+                {incident.title || incident.id}
               </h3>
             </div>
             <button

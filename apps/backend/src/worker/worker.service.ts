@@ -159,8 +159,6 @@ export class WorkerService {
 
         // 3b. Insertar el incidente principal
         const fechaCreacion = new Date();
-        const titulo = `[${dto.sistema_id}] Alerta automática — ${fechaCreacion.toISOString()}`;
-        const descripcion = `Payload inicial: ${JSON.stringify(dto.payload)}`;
 
         const fechaLimiteResolucion = SlaUtil.calcularFechaLimiteResolucion(
           fechaCreacion,
@@ -168,8 +166,8 @@ export class WorkerService {
         );
 
         const nuevoIncidente = incidenteRepo.create({
-           titulo: `[${dto.sistema_id}] Alerta automática — ${fechaCreacion.toISOString()}`,
-           descripcion: `Payload inicial: ${JSON.stringify(dto.payload)}`,
+           titulo: normalizado.titulo,
+           descripcion: normalizado.descripcion,
            estado: IncidenteEstado.ABIERTO,
            prioridad: prioridadCalculada,
            sistemaId: dto.sistema_id,

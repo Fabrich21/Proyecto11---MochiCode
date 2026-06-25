@@ -57,14 +57,24 @@ import { EventsModule } from './events/events.module';
         // Afortunadamente, pasar la url en un objeto de conexión de bull/ioredis funciona perfecto así:
         
         if (redisUrl) {
-          // Usamos la cadena de conexión de forma directa para conectarse con Redis/Upstash TLS
-          return { connection: { url: redisUrl, tls: isProduction ? { rejectUnauthorized: false } : undefined } };
+          const url = new URL(redisUrl);
+          return { 
+            connection: { 
+              host: url.hostname,
+              port: parseInt(url.port || '6379', 10),
+              username: url.username || 'default',
+              password: url.password,
+              tls: isProduction ? { rejectUnauthorized: false } : undefined,
+              maxRetriesPerRequest: null 
+            } 
+          };
         }
 
         return {
           connection: {
             host: configService.get<string>('REDIS_HOST', 'localhost'),
             port: configService.get<number>('REDIS_PORT', 6379),
+            maxRetriesPerRequest: null,
           },
         };
       },

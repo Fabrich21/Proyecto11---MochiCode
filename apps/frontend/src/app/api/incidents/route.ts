@@ -14,8 +14,9 @@ function mapBackendToFrontend(inc: any) {
 
   return {
     id: inc.id,
-    system: inc.sistemaId ?? inc.system ?? 'unknown',
-    description: inc.descripcion ?? inc.titulo ?? '',
+    title: inc.titulo || `Incidente ${inc.id}`,
+    system: inc.sistemaId || inc.sistema_id || inc.system || 'Desconocido',
+    description: inc.descripcion || inc.titulo || 'Sin descripción',
     severity,
     incidentStatus: inc.estado ?? 'ABIERTO',
     createdAt: inc.creadoEn ?? inc.createdAt ?? new Date().toISOString(),
