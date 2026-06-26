@@ -19,16 +19,35 @@ function mapBackendIncident(backendIncidente: any): Incident {
     BAJA: 'medium', // Fallback visual
   };
 
+  let slaRemaining = 0;
+  let slaPercentage = 0;
+  let slaTargetMinutes = 60; // Fallback default
+
+  const limiteSla = backendIncidente.fechaLimiteResolucion || backendIncidente.fecha_limite_resolucion;
+  if (limiteSla) {
+    const now = new Date();
+    const limite = new Date(limiteSla);
+    slaRemaining = Math.max(0, Math.round((limite.getTime() - now.getTime()) / 60000));
+    
+    if (backendIncidente.politicaSla?.tiempoMaximoResolucionMinutos) {
+      slaTargetMinutes = backendIncidente.politicaSla.tiempoMaximoResolucionMinutos;
+    }
+    const elapsedMinutes = slaTargetMinutes - slaRemaining;
+    slaPercentage = Math.round((elapsedMinutes / slaTargetMinutes) * 100);
+    slaPercentage = Math.min(100, Math.max(0, slaPercentage));
+  }
+
   return {
     id: backendIncidente.id,
-    title: backendIncidente.titulo || backendIncidente.descripcion || 'Sin título',
+    title: backendIncidente.titulo || `Incidente ${backendIncidente.id}`,
     severity: (prioridadMap[backendIncidente.prioridad] || 'medium') as any,
     system: backendIncidente.sistemaId || backendIncidente.sistema_id || 'Desconocido',
     description: backendIncidente.descripcion || backendIncidente.titulo || 'Sin descripción',
-    slaRemaining: backendIncidente.tiempoSlaMinutos || 60,
-    slaPercentage: 0,
+    slaRemaining,
+    slaPercentage,
     createdAt: backendIncidente.creadoEn || new Date(),
     incidentStatus: backendIncidente.estado || IncidenteEstado.ABIERTO,
+    slaTargetMinutes,
   };
 }
 

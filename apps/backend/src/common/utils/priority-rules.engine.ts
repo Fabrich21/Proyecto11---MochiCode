@@ -12,6 +12,7 @@ export class PriorityRulesEngine {
     'P2': 'ALTA',    // P2 puede emitir hasta ALTA
     'P4': 'ALTA',    // Pagos puede emitir hasta ALTA
     'P7': 'CRITICA', // CRM (P07) es confiable, puede emitir CRITICA
+    'P07': 'CRITICA', // Alias para P7
     'P8': 'BAJA',    // IoT solo puede emitir BAJA (sin importar lo que sugiera)
     'P9': 'MEDIA',   // Analítica hasta MEDIA
     'P12': 'ALTA',   // SSO hasta ALTA

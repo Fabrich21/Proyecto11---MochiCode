@@ -23,7 +23,8 @@ export class IncidentesService {
     const { page = 1, limit = 10, estado, sistema_id, orden = 'DESC' } = query;
     const skip = (page - 1) * limit;
 
-    const queryBuilder = this.incidenteRepository.createQueryBuilder('incidente');
+    const queryBuilder = this.incidenteRepository.createQueryBuilder('incidente')
+      .leftJoinAndSelect('incidente.politicaSla', 'politicaSla');
 
     // Filtros dinámicos
     if (estado) {

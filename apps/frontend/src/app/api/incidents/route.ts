@@ -12,6 +12,24 @@ function mapBackendToFrontend(inc: any) {
       ? 'high'
       : 'medium';
 
+  let slaRemaining = 0;
+  let slaPercentage = 0;
+  let slaTargetMinutes = 60; // Fallback default
+
+  if (inc.fechaLimiteResolucion) {
+    const now = new Date();
+    const limite = new Date(inc.fechaLimiteResolucion);
+    slaRemaining = Math.max(0, Math.round((limite.getTime() - now.getTime()) / 60000));
+    
+    // Si la politicaSla viene poblada desde el backend
+    if (inc.politicaSla?.tiempoMaximoResolucionMinutos) {
+      slaTargetMinutes = inc.politicaSla.tiempoMaximoResolucionMinutos;
+    }
+    const elapsedMinutes = slaTargetMinutes - slaRemaining;
+    slaPercentage = Math.round((elapsedMinutes / slaTargetMinutes) * 100);
+    slaPercentage = Math.min(100, Math.max(0, slaPercentage));
+  }
+
   return {
     id: inc.id,
     title: inc.titulo || `Incidente ${inc.id}`,
@@ -20,8 +38,8 @@ function mapBackendToFrontend(inc: any) {
     severity,
     incidentStatus: inc.estado ?? 'ABIERTO',
     createdAt: inc.creadoEn ?? inc.createdAt ?? new Date().toISOString(),
-    slaRemaining: inc.slaRemaining ?? 0,
-    slaPercentage: inc.slaPercentage ?? 0,
+    slaRemaining,
+    slaPercentage,
     affectedProject: inc.sistemaId ?? inc.affectedProject ?? null,
     affectedUsers: inc.affectedUsers ?? null,
     acknowledgedAt: inc.acknowledgedAt ?? null,
@@ -30,7 +48,7 @@ function mapBackendToFrontend(inc: any) {
       inc.estado === 'CERRADO'
         ? (inc.fechaResolucion ?? new Date().toISOString())
         : (inc.closedAt ?? null),
-    slaTargetMinutes: inc.slaTargetMinutes ?? null,
+    slaTargetMinutes,
   };
 }
 
