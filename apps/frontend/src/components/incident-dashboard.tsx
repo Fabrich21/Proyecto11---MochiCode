@@ -163,8 +163,8 @@ export function IncidentDashboard() {
         const items = data.data && Array.isArray(data.data) ? data.data : (Array.isArray(data) ? data : []);
         
         if (items.length > 0) {
-          const mapped = items.map(mapBackendIncident);
-          setIncidents(mapped);
+          // The items from /api/incidents are already mapped to the Incident interface by route.ts
+          setIncidents(items as Incident[]);
         }
       } catch (err) {
         console.error('[incidents] error:', err);
