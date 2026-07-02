@@ -61,7 +61,7 @@ const STATUS_MAP: Record<P9Status, IncidenteEstado> = {
  *  - incident_status_changed:            cambio de estado/severidad
  *  - incident_resolved:                  cierre del incidente
  */
-export function normalizeP9Grupo9(dto: CreateAlertaDto): NormalizedAlerta {
+export function normalizeP9Analitica(dto: CreateAlertaDto): NormalizedAlerta {
   const outer = dto.payload as P9Payload;
   const inner: P9InnerPayload = outer?.payload ?? {};
 
