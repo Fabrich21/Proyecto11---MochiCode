@@ -1,15 +1,18 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
-import { Incidente } from '../database/entities/incidente.entity';
-import { IncidenteEstado, IP9EventoOperacionalCierre } from '@proyecto/shared-types';
-import { HistorialEstado } from '../database/entities/historial-estado.entity';
-import { GetIncidentesDto } from './dto/get-incidentes.dto';
-import { UpdateEstadoIncidenteDto } from './dto/update-estado-incidente.dto';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
+import { Incidente } from '../database/entities/incidente.entity';
+import { IncidenteEstado, IP9EventoOperacionalCierre } from '@proyecto/shared-types';
+import { HistorialEstado } from '../database/entities/historial-estado.entity';
 import { Auditoria } from '../database/entities/auditoria.entity';
+import { GetIncidentesDto } from './dto/get-incidentes.dto';
+import { UpdateEstadoIncidenteDto } from './dto/update-estado-incidente.dto';
+import { AsignarIncidenteDto } from './dto/asignar-incidente.dto';
+import { EventsGateway } from '../events/events.gateway';
+import { P6NotificacionesService } from '../p6-notificaciones/p6-notificaciones.service';
 
 @Injectable()
 export class IncidentesService {
@@ -24,7 +27,9 @@ export class IncidentesService {
     @InjectRepository(Auditoria)
     private readonly auditoriaRepository: Repository<Auditoria>,
     private readonly dataSource: DataSource,
+    private readonly eventsGateway: EventsGateway,
     private readonly httpService: HttpService,
+    private readonly p6NotificacionesService: P6NotificacionesService,
     private readonly configService: ConfigService,
   ) {
     this.p9AnaliticaUrl = this.configService.get<string>(
@@ -37,7 +42,8 @@ export class IncidentesService {
     const { page = 1, limit = 10, estado, sistema_id, orden = 'DESC' } = query;
     const skip = (page - 1) * limit;
 
-    const queryBuilder = this.incidenteRepository.createQueryBuilder('incidente');
+    const queryBuilder = this.incidenteRepository.createQueryBuilder('incidente')
+      .leftJoinAndSelect('incidente.politicaSla', 'politicaSla');
 
     if (estado) {
       queryBuilder.andWhere('incidente.estado = :estado', { estado });
@@ -100,6 +106,8 @@ export class IncidentesService {
 
       await queryRunner.commitTransaction();
 
+      this.eventsGateway.emitEstadoActualizado(incidente.id, updateDto.estado);
+
       if (updateDto.estado === IncidenteEstado.CERRADO) {
         await this.notificarCierreAP9(incidenteActualizado, updateDto.usuarioId);
       }
@@ -111,6 +119,68 @@ export class IncidentesService {
     } finally {
       await queryRunner.release();
     }
+  }
+
+  async asignarIncidente(id: string, dto: AsignarIncidenteDto) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    let incidenteActualizado: Incidente;
+
+    try {
+      const incidente = await queryRunner.manager.findOne(Incidente, { where: { id } });
+
+      if (!incidente) {
+        throw new NotFoundException(`Incidente con ID ${id} no encontrado`);
+      }
+
+      incidente.asignadoAUsuarioId = dto.asignadoAUsuarioId;
+      incidenteActualizado = await queryRunner.manager.save(incidente);
+
+      const auditoria = new Auditoria();
+      auditoria.incidenteId = incidente.id;
+      auditoria.accionPorUsuarioId = dto.usuarioId;
+      auditoria.descripcionAccion =
+        `Ticket asignado al usuario ${dto.asignadoAUsuarioId}.`;
+
+      await queryRunner.manager.save(auditoria);
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+
+    this.eventsGateway.emitIncidenteActualizado(id, {
+      asignadoAUsuarioId: dto.asignadoAUsuarioId,
+    });
+
+    const email =
+      dto.email ?? this.configService.get<string>('P6_DEFAULT_EMAIL');
+
+    if (email) {
+      try {
+        await this.p6NotificacionesService.enviarEmailAsignacionTicket({
+          email,
+          incidenteId: id,
+          titulo: incidenteActualizado.titulo,
+          asignadoAUsuarioId: dto.asignadoAUsuarioId,
+        });
+      } catch (error) {
+        this.logger.error(
+          `No se pudo enviar email P6 al asignar incidente ${id}`,
+          error,
+        );
+      }
+    } else {
+      this.logger.warn(
+        `Asignación de ${id} sin email: configure dto.email o P6_DEFAULT_EMAIL.`,
+      );
+    }
+
+    return incidenteActualizado;
   }
 
   private async notificarCierreAP9(incidente: Incidente, usuarioId: string): Promise<void> {

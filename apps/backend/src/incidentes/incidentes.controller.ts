@@ -2,6 +2,7 @@ import { Controller, Get, Patch, Param, Body, Query } from '@nestjs/common';
 import { IncidentesService } from './incidentes.service';
 import { GetIncidentesDto } from './dto/get-incidentes.dto';
 import { UpdateEstadoIncidenteDto } from './dto/update-estado-incidente.dto';
+import { AsignarIncidenteDto } from './dto/asignar-incidente.dto';
 
 @Controller('incidentes')
 export class IncidentesController {
@@ -18,5 +19,13 @@ export class IncidentesController {
     @Body() updateEstadoIncidenteDto: UpdateEstadoIncidenteDto,
   ) {
     return this.incidentesService.cambiarEstado(id, updateEstadoIncidenteDto);
+  }
+
+  @Patch(':id/asignar')
+  asignarIncidente(
+    @Param('id') id: string,
+    @Body() asignarIncidenteDto: AsignarIncidenteDto,
+  ) {
+    return this.incidentesService.asignarIncidente(id, asignarIncidenteDto);
   }
 }

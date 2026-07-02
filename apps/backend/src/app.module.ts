@@ -12,6 +12,7 @@ import { WorkerModule } from './worker/worker.module';
 import { IncidentesModule } from './incidentes/incidentes.module';
 import { SlaModule } from './sla/sla.module';
 import { HttpClientModule } from './common/http-client/http-client.module';
+import { P6NotificacionesModule } from './p6-notificaciones/p6-notificaciones.module';
 import { EventsModule } from './events/events.module';
 
 @Module({
@@ -85,6 +86,7 @@ import { EventsModule } from './events/events.module';
 
     // --- MÓDULOS DEL DOMINIO ---
     HttpClientModule, // Cliente HTTP resiliente para integraciones externas (P6, P9, P12)
+    P6NotificacionesModule, // Conectores Email y Móvil hacia Proyecto 6
     // Escudo antispam: Rate Limiting Global
     ThrottlerModule.forRoot([{
       ttl: 60000, // Una ventana de 60 segundos (1 minuto)
