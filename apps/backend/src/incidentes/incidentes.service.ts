@@ -1,15 +1,21 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
+import { ConfigService } from '@nestjs/config';
 import { Incidente } from '../database/entities/incidente.entity';
 import { IncidenteEstado } from '@proyecto/shared-types';
 import { HistorialEstado } from '../database/entities/historial-estado.entity';
+import { Auditoria } from '../database/entities/auditoria.entity';
 import { GetIncidentesDto } from './dto/get-incidentes.dto';
 import { UpdateEstadoIncidenteDto } from './dto/update-estado-incidente.dto';
+import { AsignarIncidenteDto } from './dto/asignar-incidente.dto';
 import { EventsGateway } from '../events/events.gateway';
+import { P6NotificacionesService } from '../p6-notificaciones/p6-notificaciones.service';
 
 @Injectable()
 export class IncidentesService {
+  private readonly logger = new Logger(IncidentesService.name);
+
   constructor(
     @InjectRepository(Incidente)
     private readonly incidenteRepository: Repository<Incidente>,
@@ -17,6 +23,8 @@ export class IncidentesService {
     private readonly historialEstadoRepository: Repository<HistorialEstado>,
     private readonly dataSource: DataSource,
     private readonly eventsGateway: EventsGateway,
+    private readonly p6NotificacionesService: P6NotificacionesService,
+    private readonly configService: ConfigService,
   ) {}
 
   async findAll(query: GetIncidentesDto) {
@@ -100,5 +108,67 @@ export class IncidentesService {
     } finally {
       await queryRunner.release();
     }
+  }
+
+  async asignarIncidente(id: string, dto: AsignarIncidenteDto) {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    let incidenteActualizado: Incidente;
+
+    try {
+      const incidente = await queryRunner.manager.findOne(Incidente, { where: { id } });
+
+      if (!incidente) {
+        throw new NotFoundException(`Incidente con ID ${id} no encontrado`);
+      }
+
+      incidente.asignadoAUsuarioId = dto.asignadoAUsuarioId;
+      incidenteActualizado = await queryRunner.manager.save(incidente);
+
+      const auditoria = new Auditoria();
+      auditoria.incidenteId = incidente.id;
+      auditoria.accionPorUsuarioId = dto.usuarioId;
+      auditoria.descripcionAccion =
+        `Ticket asignado al usuario ${dto.asignadoAUsuarioId}.`;
+
+      await queryRunner.manager.save(auditoria);
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+
+    this.eventsGateway.emitIncidenteActualizado(id, {
+      asignadoAUsuarioId: dto.asignadoAUsuarioId,
+    });
+
+    const email =
+      dto.email ?? this.configService.get<string>('P6_DEFAULT_EMAIL');
+
+    if (email) {
+      try {
+        await this.p6NotificacionesService.enviarEmailAsignacionTicket({
+          email,
+          incidenteId: id,
+          titulo: incidenteActualizado.titulo,
+          asignadoAUsuarioId: dto.asignadoAUsuarioId,
+        });
+      } catch (error) {
+        this.logger.error(
+          `No se pudo enviar email P6 al asignar incidente ${id}`,
+          error,
+        );
+      }
+    } else {
+      this.logger.warn(
+        `Asignación de ${id} sin email: configure dto.email o P6_DEFAULT_EMAIL.`,
+      );
+    }
+
+    return incidenteActualizado;
   }
 }

@@ -1,12 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
-import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
-import { firstValueFrom } from 'rxjs';
 import { Incidente } from '../database/entities/incidente.entity';
 import { ReglaEscalamiento } from '../database/entities/regla-escalamiento.entity';
 import { IncidenteEstado } from '@proyecto/shared-types';
+import { P6NotificacionesService } from '../p6-notificaciones/p6-notificaciones.service';
 
 /**
  * Lógica de detección y resolución de vencimientos SLA.
@@ -15,13 +14,12 @@ import { IncidenteEstado } from '@proyecto/shared-types';
  *  1. Marca sla_vencido = TRUE y estado = VENCIDO (transacción atómica).
  *  2. Inserta en historial_estados.
  *  3. Inserta en auditoria.
- *  4. Consulta reglas_escalamiento de la política del ticket y notifica a P6.
+ *  4. Consulta reglas_escalamiento y notifica vía Conector Móvil P6 (SMS).
  */
 @Injectable()
 export class SlaService {
   private readonly logger = new Logger(SlaService.name);
   private readonly sistemaAutomaticoUuid: string;
-  private readonly p6NotificacionesUrl: string;
 
   constructor(
     private readonly dataSource: DataSource,
@@ -32,17 +30,12 @@ export class SlaService {
     @InjectRepository(ReglaEscalamiento)
     private readonly reglaRepo: Repository<ReglaEscalamiento>,
 
-    private readonly httpService: HttpService,
+    private readonly p6NotificacionesService: P6NotificacionesService,
     private readonly configService: ConfigService,
   ) {
     this.sistemaAutomaticoUuid = this.configService.get<string>(
       'SISTEMA_AUTOMATICO_UUID',
       '00000000-0000-0000-0000-000000000001',
-    )!;
-
-    this.p6NotificacionesUrl = this.configService.get<string>(
-      'P6_NOTIFICACIONES_URL',
-      'http://p6-notificaciones/api/v1/notificaciones',
     )!;
   }
 
@@ -54,7 +47,6 @@ export class SlaService {
    *   creado_en + (tiempo_maximo_resolucion_minutos * INTERVAL '1 min') < NOW()
    */
   async detectarYProcesarVencimientos(): Promise<void> {
-    // Usamos SQL raw para aprovechar el índice parcial y hacer el JOIN en una sola pasada
     const vencidos: Array<{ id: string; politica_sla_id: string; sistema_id: string; titulo: string }> =
       await this.dataSource.query(`
         SELECT i.id, i.politica_sla_id, i.sistema_id, i.titulo
@@ -72,15 +64,11 @@ export class SlaService {
 
     this.logger.warn(`Cron SLA: ${vencidos.length} ticket(s) vencido(s) detectado(s).`);
 
-    // Procesamos en paralelo — cada ticket tiene su propia transacción
     await Promise.allSettled(
       vencidos.map((ticket) => this.procesarVencimiento(ticket)),
     );
   }
 
-  // ---------------------------------------------------------------------------
-  // Privado: procesa UN ticket vencido dentro de una transacción atómica
-  // ---------------------------------------------------------------------------
   private async procesarVencimiento(ticket: {
     id: string;
     politica_sla_id: string;
@@ -92,7 +80,6 @@ export class SlaService {
     await queryRunner.startTransaction();
 
     try {
-      // 1. Actualizar estado + flag en una sola query (evita race conditions)
       await queryRunner.query(
         `UPDATE "incidentes"
          SET    "estado" = $1, "sla_vencido" = TRUE
@@ -100,7 +87,6 @@ export class SlaService {
         [IncidenteEstado.VENCIDO, ticket.id],
       );
 
-      // 2. Registrar en historial_estados (hypertable)
       await queryRunner.query(
         `INSERT INTO "historial_estados"
            ("id", "incidente_id", "estado_anterior", "estado_nuevo",
@@ -108,13 +94,12 @@ export class SlaService {
          VALUES (gen_random_uuid(), $1, $2, $3, $4, now())`,
         [
           ticket.id,
-          IncidenteEstado.ABIERTO,   // estado_anterior representativo (puede ser EN_PROGRESO)
+          IncidenteEstado.ABIERTO,
           IncidenteEstado.VENCIDO,
           this.sistemaAutomaticoUuid,
         ],
       );
 
-      // 3. Registrar en auditoría
       await queryRunner.query(
         `INSERT INTO "auditoria"
            ("id", "incidente_id", "accion_por_usuario_id", "descripcion_accion", "creado_en")
@@ -131,18 +116,14 @@ export class SlaService {
     } catch (error) {
       await queryRunner.rollbackTransaction();
       this.logger.error(`Error al procesar vencimiento del ticket ${ticket.id}`, error);
-      return; // No lanzamos: un error en un ticket no debe detener el resto
+      return;
     } finally {
       await queryRunner.release();
     }
 
-    // 4. Notificar FUERA de la transacción (el HTTP no debe bloquear el commit)
     await this.notificarEscalamientos(ticket.id, ticket.politica_sla_id, ticket.titulo);
   }
 
-  // ---------------------------------------------------------------------------
-  // Privado: consulta reglas_escalamiento y llama a P6
-  // ---------------------------------------------------------------------------
   private async notificarEscalamientos(
     incidenteId: string,
     politicaSlaId: string,
@@ -158,24 +139,29 @@ export class SlaService {
       return;
     }
 
+    const telefonoDefault = this.configService.get<string>('P6_DEFAULT_TELEFONO');
+
     for (const regla of reglas) {
+      const telefono = telefonoDefault;
+
+      if (!telefono) {
+        this.logger.warn(
+          `SLA vencido en ${incidenteId}: sin teléfono para usuario ${regla.notificarAUsuarioId}. ` +
+            'Configure P6_DEFAULT_TELEFONO.',
+        );
+        continue;
+      }
+
       try {
-        await firstValueFrom(
-          this.httpService.post(this.p6NotificacionesUrl, {
-            tipo: 'SLA_VENCIDO',
-            incidente_id: incidenteId,
-            titulo,
-            notificar_a_usuario_id: regla.notificarAUsuarioId,
-          }),
-        );
-        this.logger.log(
-          `Notificación SLA_VENCIDO enviada a P6 para usuario ${regla.notificarAUsuarioId}.`,
-        );
+        await this.p6NotificacionesService.enviarNotificacionMovilSlaVencido({
+          telefono,
+          incidenteId,
+          titulo,
+          usuarioDestinoId: regla.notificarAUsuarioId,
+        });
       } catch (error) {
-        // HttpClientModule ya reintentó 3 veces con backoff exponencial.
-        // Si aun así falla, solo lo logueamos (la auditoría ya quedó registrada).
         this.logger.error(
-          `No se pudo notificar a P6 para el incidente ${incidenteId} (usuario: ${regla.notificarAUsuarioId})`,
+          `No se pudo notificar vía P6 móvil para el incidente ${incidenteId} (usuario: ${regla.notificarAUsuarioId})`,
           error,
         );
       }

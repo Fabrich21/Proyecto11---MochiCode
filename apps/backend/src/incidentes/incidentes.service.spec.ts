@@ -7,12 +7,15 @@ import { DataSource } from 'typeorm';
 import { IncidenteEstado } from '@proyecto/shared-types';
 import { NotFoundException } from '@nestjs/common';
 import { EventsGateway } from '../events/events.gateway';
+import { P6NotificacionesService } from '../p6-notificaciones/p6-notificaciones.service';
+import { ConfigService } from '@nestjs/config';
 
 describe('IncidentesService', () => {
   let service: IncidentesService;
 
   // Emulamos el comportamiento del QueryBuilder de TypeORM
   const mockQueryBuilder = {
+    leftJoinAndSelect: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
     orderBy: jest.fn().mockReturnThis(),
     skip: jest.fn().mockReturnThis(),
@@ -45,6 +48,15 @@ describe('IncidentesService', () => {
 
   const mockEventsGateway = {
     emitEstadoActualizado: jest.fn(),
+    emitIncidenteActualizado: jest.fn(),
+  };
+
+  const mockP6NotificacionesService = {
+    enviarEmailAsignacionTicket: jest.fn(),
+  };
+
+  const mockConfigService = {
+    get: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -66,6 +78,14 @@ describe('IncidentesService', () => {
         {
           provide: EventsGateway,
           useValue: mockEventsGateway,
+        },
+        {
+          provide: P6NotificacionesService,
+          useValue: mockP6NotificacionesService,
+        },
+        {
+          provide: ConfigService,
+          useValue: mockConfigService,
         },
       ],
     }).compile();
@@ -143,6 +163,36 @@ describe('IncidentesService', () => {
       expect(mockQueryRunner.manager.save).toHaveBeenCalledTimes(2);
       expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
       expect(result.estado).toBe(IncidenteEstado.CERRADO);
+    });
+  });
+
+  describe('asignarIncidente', () => {
+    it('debería asignar el ticket y notificar por email vía P6', async () => {
+      const mockIncidente = { id: '1', titulo: 'Ticket test', asignadoAUsuarioId: undefined };
+      const incidenteAsignado = {
+        ...mockIncidente,
+        asignadoAUsuarioId: 'user-asignado',
+      };
+
+      mockQueryRunner.manager.findOne.mockResolvedValue(mockIncidente);
+      mockQueryRunner.manager.save
+        .mockResolvedValueOnce(incidenteAsignado)
+        .mockResolvedValueOnce({});
+
+      const result = await service.asignarIncidente('1', {
+        asignadoAUsuarioId: 'user-asignado',
+        usuarioId: 'user-admin',
+        email: 'operador@test.com',
+      });
+
+      expect(result.asignadoAUsuarioId).toBe('user-asignado');
+      expect(mockP6NotificacionesService.enviarEmailAsignacionTicket).toHaveBeenCalledWith({
+        email: 'operador@test.com',
+        incidenteId: '1',
+        titulo: 'Ticket test',
+        asignadoAUsuarioId: 'user-asignado',
+      });
+      expect(mockEventsGateway.emitIncidenteActualizado).toHaveBeenCalled();
     });
   });
 });

@@ -26,6 +26,12 @@ export interface IUpdateEstadoIncidenteDto {
   usuarioId: string;
 }
 
+export interface IAsignarIncidenteDto {
+  asignadoAUsuarioId: string;
+  usuarioId: string;
+  email?: string;
+}
+
 export interface IGetIncidentesDto {
   page?: number;
   limit?: number;
