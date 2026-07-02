@@ -1,11 +1,16 @@
-import { IncidenteEstado } from '@proyecto/shared-types';
+
+export enum IncidenteEstado {
+  ABIERTO = 'ABIERTO',
+  EN_PROGRESO = 'EN_PROGRESO',
+  CERRADO = 'CERRADO',
+}
 
 export type IncidentSeverity = 'critical' | 'high' | 'medium';
-
 export type IncidentStatus = IncidenteEstado;
 
 export interface Incident {
   id: string;
+  title?: string;
   severity: IncidentSeverity;
   system: string;
   description: string;

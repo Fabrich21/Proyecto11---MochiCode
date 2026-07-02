@@ -39,7 +39,6 @@ export class IncidentesService {
 
     const queryBuilder = this.incidenteRepository.createQueryBuilder('incidente');
 
-    // Filtros dinámicos
     if (estado) {
       queryBuilder.andWhere('incidente.estado = :estado', { estado });
     }
@@ -48,11 +47,9 @@ export class IncidentesService {
       queryBuilder.andWhere('incidente.sistemaId = :sistema_id', { sistema_id });
     }
 
-    // Ordenamiento y Paginación
     queryBuilder.orderBy('incidente.creadoEn', orden);
     queryBuilder.skip(skip).take(limit);
 
-    // Ejecuta la consulta y cuenta los totales
     const [data, total] = await queryBuilder.getManyAndCount();
 
     return {
@@ -73,20 +70,20 @@ export class IncidentesService {
 
     try {
       const incidente = await queryRunner.manager.findOne(Incidente, { where: { id } });
-      
+
       if (!incidente) {
         throw new NotFoundException(`Incidente con ID ${id} no encontrado`);
       }
 
       const estadoAnterior = incidente.estado;
-      
+
       if (estadoAnterior === updateDto.estado) {
         await queryRunner.commitTransaction();
         return incidente;
       }
 
       incidente.estado = updateDto.estado;
-      
+
       if (updateDto.estado === IncidenteEstado.CERRADO) {
         incidente.fechaResolucion = new Date();
       }
@@ -98,15 +95,15 @@ export class IncidentesService {
       historial.estadoAnterior = estadoAnterior;
       historial.estadoNuevo = updateDto.estado;
       historial.cambiadoPorUsuarioId = updateDto.usuarioId;
-      
+
       await queryRunner.manager.save(historial);
 
       await queryRunner.commitTransaction();
 
-      // Notificar cierre a P09 fuera de la transacción para no afectar consistencia local.
       if (updateDto.estado === IncidenteEstado.CERRADO) {
         await this.notificarCierreAP9(incidenteActualizado, updateDto.usuarioId);
       }
+
       return incidenteActualizado;
     } catch (error) {
       await queryRunner.rollbackTransaction();

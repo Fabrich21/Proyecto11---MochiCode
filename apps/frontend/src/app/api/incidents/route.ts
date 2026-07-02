@@ -3,36 +3,108 @@ import { listIncidents, createIncident } from '../_incidentsStore';
 
 const BACKEND_URL = process.env.BACKEND_URL || '';
 
-export async function GET() {
-  if (BACKEND_URL) {
-    const url = `${BACKEND_URL.replace(/\/$/, '')}/api/incidents`;
-    const res = await fetch(url);
-    const data = await res.json();
-    return NextResponse.json(data, { status: res.status });
+function mapBackendToFrontend(inc: any) {
+  const prioridad = (inc.prioridad ?? 'MEDIA').toUpperCase();
+  const severity: 'critical' | 'high' | 'medium' =
+    prioridad === 'CRITICA' || prioridad === 'CRITICAL'
+      ? 'critical'
+      : prioridad === 'ALTA' || prioridad === 'HIGH'
+      ? 'high'
+      : 'medium';
+
+  let slaRemaining = 0;
+  let slaPercentage = 0;
+  let slaTargetMinutes = 60; // Fallback default
+
+  if (inc.fechaLimiteResolucion) {
+    const now = new Date();
+    const limite = new Date(inc.fechaLimiteResolucion);
+    slaRemaining = Math.max(0, Math.round((limite.getTime() - now.getTime()) / 60000));
+    
+    // Si la politicaSla viene poblada desde el backend
+    if (inc.politicaSla?.tiempoMaximoResolucionMinutos) {
+      slaTargetMinutes = inc.politicaSla.tiempoMaximoResolucionMinutos;
+    }
+    const elapsedMinutes = slaTargetMinutes - slaRemaining;
+    slaPercentage = Math.round((elapsedMinutes / slaTargetMinutes) * 100);
+    slaPercentage = Math.min(100, Math.max(0, slaPercentage));
   }
 
-  const data = listIncidents();
-  return NextResponse.json(data);
+  return {
+    id: inc.id,
+    title: inc.titulo || `Incidente ${inc.id}`,
+    system: inc.sistemaId || inc.sistema_id || inc.system || 'Desconocido',
+    description: inc.descripcion || inc.titulo || 'Sin descripción',
+    severity,
+    incidentStatus: inc.estado ?? 'ABIERTO',
+    createdAt: inc.creadoEn ?? inc.createdAt ?? new Date().toISOString(),
+    slaRemaining,
+    slaPercentage,
+    affectedProject: inc.sistemaId ?? inc.affectedProject ?? null,
+    affectedUsers: inc.affectedUsers ?? null,
+    acknowledgedAt: inc.acknowledgedAt ?? null,
+    resolvedAt: inc.fechaResolucion ?? inc.resolvedAt ?? null,
+    closedAt:
+      inc.estado === 'CERRADO'
+        ? (inc.fechaResolucion ?? new Date().toISOString())
+        : (inc.closedAt ?? null),
+    slaTargetMinutes,
+  };
 }
 
+// ─── GET /api/incidents ──────────────────────────────────────────────────────
+export async function GET() {
+  if (BACKEND_URL) {
+    try {
+      const url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/incidentes`;
+      const res = await fetch(url, { cache: 'no-store' });
+
+      if (!res.ok) {
+        return NextResponse.json(
+          { error: 'backend_error', status: res.status },
+          { status: res.status },
+        );
+      }
+
+      const json = await res.json();
+      // El backend envuelve la respuesta: { data: [...], meta: {...} }
+      const items: any[] = Array.isArray(json) ? json : (json.data ?? []);
+
+      return NextResponse.json(items.map(mapBackendToFrontend));
+    } catch (err) {
+      console.error('[GET /api/incidents] Error conectando al backend:', err);
+      return NextResponse.json({ error: 'connection_failed' }, { status: 502 });
+    }
+  }
+
+  // Fallback mock
+  return NextResponse.json(listIncidents());
+}
+
+// ─── POST /api/incidents ─────────────────────────────────────────────────────
 export async function POST(request: Request) {
   if (BACKEND_URL) {
-    const url = `${BACKEND_URL.replace(/\/$/, '')}/api/incidents`;
-    const body = await request.text();
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': request.headers.get('content-type') || 'application/json' },
-      body,
-    });
-    const data = await res.json();
-    return NextResponse.json(data, { status: res.status });
+    try {
+      const url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/incidentes`;
+      const body = await request.text();
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body,
+      });
+      const data = await res.json();
+      return NextResponse.json(mapBackendToFrontend(data), { status: res.status });
+    } catch (err) {
+      console.error('[POST /api/incidents] Error:', err);
+      return NextResponse.json({ error: 'connection_failed' }, { status: 502 });
+    }
   }
 
   try {
     const body = await request.json();
     const created = createIncident(body);
     return NextResponse.json(created, { status: 201 });
-  } catch (err) {
+  } catch {
     return NextResponse.json({ error: 'invalid_payload' }, { status: 400 });
   }
 }

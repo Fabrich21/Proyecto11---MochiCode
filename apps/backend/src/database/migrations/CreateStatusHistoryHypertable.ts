@@ -18,10 +18,11 @@ export class CreateStatusHistoryHypertable1745634004000 implements MigrationInte
       )
     `);
 
-    // Convertir a Hypertable de TimescaleDB particionado por tiempo
-    await queryRunner.query(`
-      SELECT create_hypertable('historial_estados', 'cambiado_en')
-    `);
+    // NOTA: Se comenta create_hypertable porque Neon.tech/Render no soportan la extensión TimescaleDB.
+    // La tabla funcionará como una tabla relacional estándar.
+    // await queryRunner.query(`
+    //   SELECT create_hypertable('historial_estados', 'cambiado_en')
+    // `);
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {

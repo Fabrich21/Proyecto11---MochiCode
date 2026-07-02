@@ -7,6 +7,8 @@ import { Sistema } from '../database/entities/sistema.entity';
 import { PoliticaSla } from '../database/entities/politica-sla.entity';
 import { Incidente } from '../database/entities/incidente.entity';
 import { PayloadNormalizerService } from '../ingestion/normalizer/payload-normalizer.service';
+import { IngestionModule } from '../ingestion/ingestion.module';
+import { EventsModule } from '../events/events.module';
 
 @Module({
   imports: [
@@ -14,6 +16,8 @@ import { PayloadNormalizerService } from '../ingestion/normalizer/payload-normal
       name: 'alertas-queue',
     }),
     TypeOrmModule.forFeature([Sistema, PoliticaSla, Incidente]),
+    IngestionModule,
+    EventsModule,
   ],
   providers: [
     AlertasProcessor,
