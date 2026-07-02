@@ -42,8 +42,7 @@ export class IncidentesService {
     const { page = 1, limit = 10, estado, sistema_id, orden = 'DESC' } = query;
     const skip = (page - 1) * limit;
 
-    const queryBuilder = this.incidenteRepository.createQueryBuilder('incidente')
-      .leftJoinAndSelect('incidente.politicaSla', 'politicaSla');
+    const queryBuilder = this.incidenteRepository.createQueryBuilder('incidente');
 
     if (estado) {
       queryBuilder.andWhere('incidente.estado = :estado', { estado });
@@ -106,7 +105,13 @@ export class IncidentesService {
 
       await queryRunner.commitTransaction();
 
+<<<<<<< HEAD
       this.eventsGateway.emitEstadoActualizado(incidente.id, updateDto.estado);
+=======
+      if (updateDto.estado === IncidenteEstado.CERRADO) {
+        await this.notificarCierreAP9(incidenteActualizado, updateDto.usuarioId);
+      }
+>>>>>>> f2033a3fcd87911b979af9f389b65d695a33a313
 
       if (updateDto.estado === IncidenteEstado.CERRADO) {
         await this.notificarCierreAP9(incidenteActualizado, updateDto.usuarioId);
