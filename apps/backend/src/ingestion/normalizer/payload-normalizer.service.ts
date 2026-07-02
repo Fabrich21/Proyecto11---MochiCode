@@ -7,6 +7,7 @@ import { normalizeP5Inventario } from './strategies/p5-inventario.strategy';
 import { normalizeP8Iot } from './strategies/p8-iot.strategy';
 import { normalizeP3Pedidos } from './strategies/p3-pedidos.strategy';
 import { normalizeP4Pasarela } from './strategies/p4-pasarela.strategy';
+import { normalizeP07 } from './strategies/p07.strategy';
 import { normalizeDefault } from './strategies/default.strategy';
 
 /**
@@ -46,6 +47,11 @@ export class PayloadNormalizerService {
     // Grupo 5 — Inventario
     // Formato: { source, event_type, project_id, created_at, payload: { ... } }
     P5: normalizeP5Inventario,
+
+    // Grupo 7 — CRM
+    // Formato: ticket CRM con campos estandarizados (titulo, descripcion, prioridad, estado)
+    P7: normalizeP07,
+    P07: normalizeP07,
 
     // Grupo 8 — IoT
     // Formato soportado:

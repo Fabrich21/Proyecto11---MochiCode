@@ -4,33 +4,24 @@
  */
 export class PriorityRulesEngine {
   /**
-   * Mapeo estático de sistemas a su Trust Level (Nivel Máximo de Confianza).
-   * Define hasta qué nivel de prioridad le permitimos a un sistema declarar.
+   * Mapeo estático de sistemas a niveles de prioridad por defecto.
    */
-  private static readonly TRUST_LEVELS: Record<string, string> = {
-    'P1': 'CRITICA', // P1 puede emitir hasta CRITICA
-    'P2': 'ALTA',    // P2 puede emitir hasta ALTA
-    'P4': 'ALTA',    // Pagos puede emitir hasta ALTA
-    'P7': 'CRITICA', // CRM (P07) es confiable, puede emitir CRITICA
-    'P07': 'CRITICA', // Alias para P7
-    'P8': 'BAJA',    // IoT solo puede emitir BAJA (sin importar lo que sugiera)
-    'P9': 'MEDIA',   // Analítica hasta MEDIA
-    'P12': 'ALTA',   // SSO hasta ALTA
-  };
-
-  private static readonly PRIORIDAD_PESO: Record<string, number> = {
-    'CRITICA': 4,
-    'ALTA': 3,
-    'MEDIA': 2,
-    'BAJA': 1,
+  private static readonly REGLAS_ORIGEN: Record<string, string> = {
+    'P1': 'CRITICA',
+    'P2': 'ALTA',
+    'P7': 'CRITICA',
+    'P07': 'CRITICA',
+    'P8': 'BAJA',
+    'P9': 'MEDIA',
+    'P12': 'ALTA',
   };
 
   /**
-   * Calcula la prioridad asignada a un webhook usando Trust Levels.
+   * Calcula la prioridad asignada a un webhook.
    *
    * @param sistemaId Identificador del sistema de origen
-   * @param prioridadSugerida Prioridad inferida por el Normalizador
-   * @returns Nivel de prioridad final asignado
+   * @param payload Payload original del webhook
+   * @returns Nivel de prioridad final
    */
   static calcularPrioridad(sistemaId: string, payload?: any): string {
     const sistema = sistemaId?.toUpperCase();
@@ -112,8 +103,7 @@ export class PriorityRulesEngine {
       return regla;
     }
 
-    // Si la sugerida es menor o igual a su Trust Level, se la respetamos.
-    // Si intenta pedir más prioridad de la que tiene permitida, la limitamos a su Max Trust.
-    return pesoSugerido <= pesoMaximo ? sugerida : maxTrust;
+    // Default si no hay regla específica para el origen
+    return 'MEDIA';
   }
 }
