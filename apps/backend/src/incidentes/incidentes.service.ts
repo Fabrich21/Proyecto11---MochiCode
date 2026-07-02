@@ -3,7 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { ConfigService } from '@nestjs/config';
 import { Incidente } from '../database/entities/incidente.entity';
-import { IncidenteEstado } from '@proyecto/shared-types';
+import { IncidenteEstado, IP9EventoOperacionalCierre } from '@proyecto/shared-types';
 import { HistorialEstado } from '../database/entities/historial-estado.entity';
 import { Auditoria } from '../database/entities/auditoria.entity';
 import { GetIncidentesDto } from './dto/get-incidentes.dto';
@@ -21,6 +21,8 @@ export class IncidentesService {
     private readonly incidenteRepository: Repository<Incidente>,
     @InjectRepository(HistorialEstado)
     private readonly historialEstadoRepository: Repository<HistorialEstado>,
+    @InjectRepository(Auditoria)
+    private readonly auditoriaRepository: Repository<Auditoria>,
     private readonly dataSource: DataSource,
     private readonly eventsGateway: EventsGateway,
     private readonly p6NotificacionesService: P6NotificacionesService,
@@ -31,10 +33,8 @@ export class IncidentesService {
     const { page = 1, limit = 10, estado, sistema_id, orden = 'DESC' } = query;
     const skip = (page - 1) * limit;
 
-    const queryBuilder = this.incidenteRepository.createQueryBuilder('incidente')
-      .leftJoinAndSelect('incidente.politicaSla', 'politicaSla');
+    const queryBuilder = this.incidenteRepository.createQueryBuilder('incidente');
 
-    // Filtros dinámicos
     if (estado) {
       queryBuilder.andWhere('incidente.estado = :estado', { estado });
     }
@@ -43,11 +43,9 @@ export class IncidentesService {
       queryBuilder.andWhere('incidente.sistemaId = :sistema_id', { sistema_id });
     }
 
-    // Ordenamiento y Paginación
     queryBuilder.orderBy('incidente.creadoEn', orden);
     queryBuilder.skip(skip).take(limit);
 
-    // Ejecuta la consulta y cuenta los totales
     const [data, total] = await queryBuilder.getManyAndCount();
 
     return {
@@ -68,20 +66,20 @@ export class IncidentesService {
 
     try {
       const incidente = await queryRunner.manager.findOne(Incidente, { where: { id } });
-      
+
       if (!incidente) {
         throw new NotFoundException(`Incidente con ID ${id} no encontrado`);
       }
 
       const estadoAnterior = incidente.estado;
-      
+
       if (estadoAnterior === updateDto.estado) {
         await queryRunner.commitTransaction();
         return incidente;
       }
 
       incidente.estado = updateDto.estado;
-      
+
       if (updateDto.estado === IncidenteEstado.CERRADO) {
         incidente.fechaResolucion = new Date();
       }
@@ -93,13 +91,14 @@ export class IncidentesService {
       historial.estadoAnterior = estadoAnterior;
       historial.estadoNuevo = updateDto.estado;
       historial.cambiadoPorUsuarioId = updateDto.usuarioId;
-      
+
       await queryRunner.manager.save(historial);
 
       await queryRunner.commitTransaction();
 
-      // Emitir evento WebSocket del cambio de estado
-      this.eventsGateway.emitEstadoActualizado(incidente.id, updateDto.estado);
+      if (updateDto.estado === IncidenteEstado.CERRADO) {
+        await this.notificarCierreAP9(incidenteActualizado, updateDto.usuarioId);
+      }
 
       return incidenteActualizado;
     } catch (error) {
