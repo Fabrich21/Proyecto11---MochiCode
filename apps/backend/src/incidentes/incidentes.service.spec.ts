@@ -3,17 +3,19 @@ import { IncidentesService } from './incidentes.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { Incidente } from '../database/entities/incidente.entity';
 import { HistorialEstado } from '../database/entities/historial-estado.entity';
+import { Auditoria } from '../database/entities/auditoria.entity';
 import { DataSource } from 'typeorm';
 import { IncidenteEstado } from '@proyecto/shared-types';
 import { NotFoundException } from '@nestjs/common';
+import { HttpService } from '@nestjs/axios';
+import { ConfigService } from '@nestjs/config';
+import { of, throwError } from 'rxjs';
 import { EventsGateway } from '../events/events.gateway';
 import { P6NotificacionesService } from '../p6-notificaciones/p6-notificaciones.service';
-import { ConfigService } from '@nestjs/config';
 
 describe('IncidentesService', () => {
   let service: IncidentesService;
 
-  // Emulamos el comportamiento del QueryBuilder de TypeORM
   const mockQueryBuilder = {
     leftJoinAndSelect: jest.fn().mockReturnThis(),
     andWhere: jest.fn().mockReturnThis(),
@@ -29,7 +31,6 @@ describe('IncidentesService', () => {
 
   const mockHistorialRepository = {};
 
-  // Emulamos las transacciones de TypeORM
   const mockQueryRunner = {
     connect: jest.fn(),
     startTransaction: jest.fn(),
@@ -51,12 +52,25 @@ describe('IncidentesService', () => {
     emitIncidenteActualizado: jest.fn(),
   };
 
+  const mockHttpService = {
+    post: jest.fn(),
+  };
+
   const mockP6NotificacionesService = {
     enviarEmailAsignacionTicket: jest.fn(),
   };
 
   const mockConfigService = {
-    get: jest.fn(),
+    get: jest.fn().mockImplementation((key: string, defaultValue?: string) => {
+      if (key === 'P9_ANALITICA_URL') {
+        return 'http://p9-analitica/api/v1/ingesta/eventos-operacionales';
+      }
+      return defaultValue;
+    }),
+  };
+
+  const mockAuditoriaRepository = {
+    save: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -72,12 +86,20 @@ describe('IncidentesService', () => {
           useValue: mockHistorialRepository,
         },
         {
+          provide: getRepositoryToken(Auditoria),
+          useValue: mockAuditoriaRepository,
+        },
+        {
           provide: DataSource,
           useValue: mockDataSource,
         },
         {
           provide: EventsGateway,
           useValue: mockEventsGateway,
+        },
+        {
+          provide: HttpService,
+          useValue: mockHttpService,
         },
         {
           provide: P6NotificacionesService,
@@ -129,10 +151,9 @@ describe('IncidentesService', () => {
       mockQueryRunner.manager.findOne.mockResolvedValue(null);
 
       await expect(
-        service.cambiarEstado('no-existe', { estado: IncidenteEstado.CERRADO, usuarioId: 'user1' })
+        service.cambiarEstado('no-existe', { estado: IncidenteEstado.CERRADO, usuarioId: 'user1' }),
       ).rejects.toThrow(NotFoundException);
 
-      // Si falla, debe hacer rollback obligatoriamente
       expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalled();
       expect(mockQueryRunner.release).toHaveBeenCalled();
     });
@@ -144,25 +165,119 @@ describe('IncidentesService', () => {
       const result = await service.cambiarEstado('1', { estado: IncidenteEstado.ABIERTO, usuarioId: 'user1' });
 
       expect(result).toEqual(mockIncidente);
-      expect(mockQueryRunner.manager.save).not.toHaveBeenCalled(); // No debe guardar nada extra
+      expect(mockQueryRunner.manager.save).not.toHaveBeenCalled();
       expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
     });
 
-    it('debería actualizar el estado y crear el historial en BD si el estado cambia', async () => {
-      const mockIncidente = { id: '1', estado: IncidenteEstado.ABIERTO };
-      const incidenteActualizado = { ...mockIncidente, estado: IncidenteEstado.CERRADO, fechaResolucion: new Date() };
-      
+    it('debería actualizar el estado, notificar P09 y crear historial al cerrar', async () => {
+      const mockIncidente = {
+        id: '1',
+        estado: IncidenteEstado.ABIERTO,
+        sistemaId: 'P4',
+        creadoEn: new Date('2026-06-28T00:00:00.000Z'),
+        slaVencido: false,
+        prioridad: 'ALTA',
+      };
+      const incidenteActualizado = {
+        ...mockIncidente,
+        estado: IncidenteEstado.CERRADO,
+        fechaResolucion: new Date(),
+      };
+
       mockQueryRunner.manager.findOne.mockResolvedValue(mockIncidente);
-      
-      // La primera vez que llame save() devuelve el incidente, la segunda el historial
-      mockQueryRunner.manager.save.mockResolvedValueOnce(incidenteActualizado).mockResolvedValueOnce({});
+      mockHttpService.post.mockReturnValue(of({ data: { ok: true } }));
+      mockAuditoriaRepository.save.mockResolvedValue({ id: 'audit-1' });
+      mockQueryRunner.manager.save
+        .mockResolvedValueOnce(incidenteActualizado)
+        .mockResolvedValueOnce({});
 
       const result = await service.cambiarEstado('1', { estado: IncidenteEstado.CERRADO, usuarioId: 'user1' });
 
-      // Verificamos que se guardaron ambas cosas en la transacción
       expect(mockQueryRunner.manager.save).toHaveBeenCalledTimes(2);
       expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
       expect(result.estado).toBe(IncidenteEstado.CERRADO);
+      expect(mockEventsGateway.emitEstadoActualizado).toHaveBeenCalledWith('1', IncidenteEstado.CERRADO);
+      expect(mockHttpService.post).toHaveBeenCalledWith(
+        'http://p9-analitica/api/v1/ingesta/eventos-operacionales',
+        expect.objectContaining({
+          evento: 'Cierre',
+          incidente_id: '1',
+          mttr_minutos: expect.any(Number),
+        }),
+      );
+      expect(mockAuditoriaRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          incidenteId: '1',
+          accionPorUsuarioId: 'user1',
+          descripcionAccion: expect.stringContaining('Evento enviado a P09: Cierre'),
+        }),
+      );
+    });
+
+    it('debería calcular y enviar MTTR en minutos al cerrar un incidente', async () => {
+      jest.useFakeTimers();
+      jest.setSystemTime(new Date('2026-06-28T01:00:00.000Z'));
+
+      const creadoEn = new Date('2026-06-28T00:00:00.000Z');
+      const mockIncidente = {
+        id: 'mttr-1',
+        estado: IncidenteEstado.EN_PROGRESO,
+        sistemaId: 'P8',
+        creadoEn,
+        slaVencido: false,
+        prioridad: 'MEDIA',
+      };
+
+      mockQueryRunner.manager.findOne.mockResolvedValue(mockIncidente);
+      mockQueryRunner.manager.save
+        .mockResolvedValueOnce({ ...mockIncidente, estado: IncidenteEstado.CERRADO, fechaResolucion: new Date() })
+        .mockResolvedValueOnce({});
+      mockHttpService.post.mockReturnValue(of({ data: { ok: true } }));
+      mockAuditoriaRepository.save.mockResolvedValue({ id: 'audit-2' });
+
+      await service.cambiarEstado('mttr-1', { estado: IncidenteEstado.CERRADO, usuarioId: 'user1' });
+
+      expect(mockHttpService.post).toHaveBeenCalledWith(
+        'http://p9-analitica/api/v1/ingesta/eventos-operacionales',
+        expect.objectContaining({
+          incidente_id: 'mttr-1',
+          mttr_minutos: 60,
+          evento: 'Cierre',
+        }),
+      );
+
+      jest.useRealTimers();
+    });
+
+    it('no debería fallar el cierre si el webhook de P09 retorna error', async () => {
+      const mockIncidente = {
+        id: 'error-webhook',
+        estado: IncidenteEstado.EN_PROGRESO,
+        sistemaId: 'P1',
+        creadoEn: new Date('2026-06-28T00:00:00.000Z'),
+        slaVencido: false,
+        prioridad: 'ALTA',
+      };
+
+      mockQueryRunner.manager.findOne.mockResolvedValue(mockIncidente);
+      mockQueryRunner.manager.save
+        .mockResolvedValueOnce({ ...mockIncidente, estado: IncidenteEstado.CERRADO, fechaResolucion: new Date() })
+        .mockResolvedValueOnce({});
+      mockHttpService.post.mockReturnValue(throwError(() => new Error('P09 unavailable')));
+      mockAuditoriaRepository.save.mockResolvedValue({ id: 'audit-3' });
+
+      await expect(
+        service.cambiarEstado('error-webhook', { estado: IncidenteEstado.CERRADO, usuarioId: 'user1' }),
+      ).resolves.toBeDefined();
+
+      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
+      expect(mockAuditoriaRepository.save).toHaveBeenCalledWith(
+        expect.objectContaining({
+          incidenteId: 'error-webhook',
+          accionPorUsuarioId: 'user1',
+          descripcionAccion: expect.stringContaining('Fallo al enviar evento a P09: Cierre'),
+        }),
+      );
     });
   });
 
