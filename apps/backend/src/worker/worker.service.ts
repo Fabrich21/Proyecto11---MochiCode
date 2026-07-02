@@ -14,6 +14,7 @@ import { CreateAlertaDto } from '../ingestion/dto/create-alerta.dto';
 import { PayloadNormalizerService } from '../ingestion/normalizer/payload-normalizer.service';
 import { SlaUtil } from '../common/utils/sla.util';
 import { PriorityRulesEngine } from '../common/utils/priority-rules.engine';
+import { EventsGateway } from '../events/events.gateway';
 
 @Injectable()
 export class WorkerService {
@@ -30,6 +31,8 @@ export class WorkerService {
     private readonly politicaSlaRepo: Repository<PoliticaSla>,
 
     private readonly normalizerService: PayloadNormalizerService,
+
+    private readonly eventsGateway: EventsGateway,
 
     private readonly configService: ConfigService,
   ) {
@@ -94,6 +97,8 @@ export class WorkerService {
     await queryRunner.connect();
     await queryRunner.startTransaction();
 
+    let incidenteCreadoParaBroadcast: Incidente | null = null;
+
     try {
       const incidenteRepo = queryRunner.manager.getRepository(Incidente);
 
@@ -148,6 +153,9 @@ export class WorkerService {
         incidenteId = Array.isArray(incidenteGuardado)
           ? incidenteGuardado[0].id
           : incidenteGuardado.id;
+        incidenteCreadoParaBroadcast = Array.isArray(incidenteGuardado)
+          ? incidenteGuardado[0]
+          : incidenteGuardado;
 
         await queryRunner.query(
           'INSERT INTO "historial_estados" ("id", "incidente_id", "estado_anterior", "estado_nuevo", "cambiado_por_usuario_id", "cambiado_en") VALUES (gen_random_uuid(), $1, NULL, $2, $3, now())',
@@ -180,6 +188,10 @@ export class WorkerService {
       );
 
       await queryRunner.commitTransaction();
+
+      if (incidenteCreadoParaBroadcast) {
+        this.eventsGateway.emitNuevoIncidente(incidenteCreadoParaBroadcast);
+      }
 
       this.logger.log(
         'Alerta de ' +

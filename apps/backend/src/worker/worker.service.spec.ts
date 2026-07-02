@@ -200,6 +200,14 @@ describe('WorkerService', () => {
       expect(mockQueryRunner.commitTransaction).toHaveBeenCalledTimes(1);
     });
 
+    it('should NOT emit nuevo_incidente when reusing an active incidente', async () => {
+      // Act
+      await service.procesarAlerta(dto);
+
+      // Assert
+      expect(mockEventsGateway.emitNuevoIncidente).not.toHaveBeenCalled();
+    });
+
     it('should always release the queryRunner after success', async () => {
       // Act
       await service.procesarAlerta(dto);
@@ -288,6 +296,17 @@ describe('WorkerService', () => {
       expect(mockQueryRunner.commitTransaction).toHaveBeenCalledTimes(1);
     });
 
+    it('should emit nuevo_incidente after creating a new incidente', async () => {
+      // Act
+      await service.procesarAlerta(dto);
+
+      // Assert
+      expect(mockEventsGateway.emitNuevoIncidente).toHaveBeenCalledTimes(1);
+      expect(mockEventsGateway.emitNuevoIncidente).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'inc-new-uuid' }),
+      );
+    });
+
     it('should release the queryRunner after committing', async () => {
       // Act
       await service.procesarAlerta(dto);
@@ -364,6 +383,17 @@ describe('WorkerService', () => {
 
       // Assert
       expect(mockQueryRunner.rollbackTransaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('should NOT emit nuevo_incidente when transaction fails', async () => {
+      // Arrange
+      mockIncidenteRepo.save.mockRejectedValue(new Error('fail'));
+
+      // Act
+      await expect(service.procesarAlerta(dto)).rejects.toThrow('fail');
+
+      // Assert
+      expect(mockEventsGateway.emitNuevoIncidente).not.toHaveBeenCalled();
     });
   });
 });
