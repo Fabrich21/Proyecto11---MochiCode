@@ -73,18 +73,6 @@ describe('IncidentesService', () => {
     save: jest.fn(),
   };
 
-  const mockConfigService = {
-    get: jest.fn().mockImplementation((key: string, defaultValue: string) => {
-      if (key === 'P9_ANALITICA_URL') {
-        return 'http://p9-analitica/api/v1/ingesta/eventos-operacionales';
-      }
-      return defaultValue;
-    }),
-  };
-
-  const mockAuditoriaRepository = {
-    save: jest.fn(),
-  };
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -106,12 +94,8 @@ describe('IncidentesService', () => {
           useValue: mockDataSource,
         },
         {
-          provide: HttpService,
-          useValue: mockHttpService,
-        },
-        {
-          provide: ConfigService,
-          useValue: mockConfigService,
+          provide: EventsGateway,
+          useValue: mockEventsGateway,
         },
         {
           provide: HttpService,
@@ -185,11 +169,7 @@ describe('IncidentesService', () => {
       expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
     });
 
-<<<<<<< HEAD
     it('debería actualizar el estado, notificar P09 y crear historial al cerrar', async () => {
-=======
-    it('debería actualizar el estado y crear el historial en BD si el estado cambia', async () => {
->>>>>>> f2033a3fcd87911b979af9f389b65d695a33a313
       const mockIncidente = {
         id: '1',
         estado: IncidenteEstado.ABIERTO,
@@ -198,7 +178,6 @@ describe('IncidentesService', () => {
         slaVencido: false,
         prioridad: 'ALTA',
       };
-<<<<<<< HEAD
       const incidenteActualizado = {
         ...mockIncidente,
         estado: IncidenteEstado.CERRADO,
@@ -211,26 +190,13 @@ describe('IncidentesService', () => {
       mockQueryRunner.manager.save
         .mockResolvedValueOnce(incidenteActualizado)
         .mockResolvedValueOnce({});
-=======
-      const incidenteActualizado = { ...mockIncidente, estado: IncidenteEstado.CERRADO, fechaResolucion: new Date() };
-      
-      mockQueryRunner.manager.findOne.mockResolvedValue(mockIncidente);
-      mockHttpService.post.mockReturnValue(of({ data: { ok: true } }));
-      mockAuditoriaRepository.save.mockResolvedValue({ id: 'audit-1' });
-      
-      // La primera vez que llame save() devuelve el incidente, la segunda el historial
-      mockQueryRunner.manager.save.mockResolvedValueOnce(incidenteActualizado).mockResolvedValueOnce({});
->>>>>>> f2033a3fcd87911b979af9f389b65d695a33a313
 
       const result = await service.cambiarEstado('1', { estado: IncidenteEstado.CERRADO, usuarioId: 'user1' });
 
       expect(mockQueryRunner.manager.save).toHaveBeenCalledTimes(2);
       expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
       expect(result.estado).toBe(IncidenteEstado.CERRADO);
-<<<<<<< HEAD
       expect(mockEventsGateway.emitEstadoActualizado).toHaveBeenCalledWith('1', IncidenteEstado.CERRADO);
-=======
->>>>>>> f2033a3fcd87911b979af9f389b65d695a33a313
       expect(mockHttpService.post).toHaveBeenCalledWith(
         'http://p9-analitica/api/v1/ingesta/eventos-operacionales',
         expect.objectContaining({
