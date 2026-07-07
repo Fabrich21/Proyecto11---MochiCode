@@ -63,7 +63,7 @@ describe('IncidentesController', () => {
       const updateDto = { estado: IncidenteEstado.CERRADO, usuarioId: 'user-123' };
 
       // Actuar
-      const result = await controller.cambiarEstado('uuid-123', updateDto);
+      const result = await controller.cambiarEstado('uuid-123', updateDto, { user: { sub: 'mock-user' } });
 
       // Afirmar
       expect(service.cambiarEstado).toHaveBeenCalledWith('uuid-123', updateDto);

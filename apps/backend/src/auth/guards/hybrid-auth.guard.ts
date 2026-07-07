@@ -20,24 +20,31 @@ export class HybridAuthGuard extends JwtAuthGuard {
     // 1. Intentar validar API Key (Zero Trust)
     const apiKeyHeader = request.headers['x-api-key'];
     if (apiKeyHeader) {
-      // Verificamos si la llave está en alguna de las variables permitidas
-      const keysPermitidas = [
-        this.configService.get<string>('API_KEY_P01'),
-        this.configService.get<string>('API_KEY_P03'),
-        this.configService.get<string>('API_KEY_P05'),
-        this.configService.get<string>('API_KEY_P08'),
-        this.configService.get<string>('API_KEY_P10'),
-      ].filter(Boolean); // filtra nulos/indefinidos
-
-      if (keysPermitidas.includes(apiKeyHeader)) {
-        // Le inyectamos un usuario falso para que el resto del sistema no falle
-        request.user = {
-          userId: '00000000-0000-0000-0000-000000000001',
-          username: 'sistema_externo',
-          roles: ['api_client']
-        };
-        return true;
+      const { sistema_id } = request.body;
+      if (!sistema_id) {
+         throw new UnauthorizedException('Debe especificar un sistema_id en el payload');
       }
+
+      // Normalizamos: ej. "P01", "P08"
+      let normalizedId = String(sistema_id).toUpperCase();
+      const match = normalizedId.match(/^P(\d+)$/);
+      if (match) {
+        normalizedId = `P${match[1].padStart(2, '0')}`;
+      }
+
+      const expectedKey = this.configService.get<string>(`API_KEY_${normalizedId}`);
+
+      if (!expectedKey || apiKeyHeader !== expectedKey) {
+        throw new UnauthorizedException(`Credenciales inválidas para el sistema: ${sistema_id}`);
+      }
+
+      // Le inyectamos un usuario falso para que el resto del sistema no falle
+      request.user = {
+        userId: '00000000-0000-0000-0000-000000000001',
+        username: 'sistema_externo',
+        roles: ['api_client']
+      };
+      return true;
     }
 
     // 2. Si no hay API Key o es inválida, intentar validar JWT (Humanos)
