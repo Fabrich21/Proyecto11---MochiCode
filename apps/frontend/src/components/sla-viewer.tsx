@@ -2,12 +2,14 @@
 
 import React, { useEffect, useState } from 'react';
 import { Incident } from './incident-types';
-import { formatNumberES } from '@/lib/format';
 
-interface SistemaOption {
-  id: string;
-  nombre: string;
-}
+type ApiSystemOption = {
+  id?: string;
+  sistemaId?: string;
+  sistema_id?: string;
+  nombre?: string;
+  name?: string;
+};
 
 export default function SlaViewer({ incidents }: { incidents: Incident[] }) {
   const [sistemasMap, setSistemasMap] = useState<Record<string, string>>({});
@@ -18,10 +20,10 @@ export default function SlaViewer({ incidents }: { incidents: Incident[] }) {
       try {
         const res = await fetch('/api/systems');
         if (res.ok) {
-          const data = await res.json();
+          const data: unknown = await res.json();
           const items = Array.isArray(data) ? data : (data.data ?? []);
           const map: Record<string, string> = {};
-          items.forEach((s: any) => {
+          items.forEach((s: ApiSystemOption) => {
             const id = s.id ?? s.sistemaId ?? s.sistema_id;
             const nombre = s.nombre ?? s.name ?? id;
             if (id) map[id] = nombre;
@@ -48,20 +50,13 @@ export default function SlaViewer({ incidents }: { incidents: Incident[] }) {
   // Función para obtener el nombre del sistema
   const getSystemDisplay = (incident: Incident) => {
     if (loading) return 'Cargando...';
-    
-    // Si tenemos el nombre del sistema en el mapa, usarlo
+
     const systemName = sistemasMap[incident.system];
     if (systemName) {
-      // Extraer solo el código (ej: "PO7" de "PO7 - Sensor IoT")
-      const codeMatch = systemName.match(/^([A-Z0-9]+)/);
-      if (codeMatch) {
-        return codeMatch[1]; // Retorna solo el código
-      }
       return systemName;
     }
-    
-    // Si no está en el mapa, mostrar el ID truncado
-    return incident.system.slice(0, 8);
+
+    return incident.system || 'Sistema desconocido';
   };
 
   return (

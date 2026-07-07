@@ -3,6 +3,55 @@ import { listIncidents, createIncident } from '../_incidentsStore';
 
 const BACKEND_URL = process.env.BACKEND_URL || '';
 
+function normalizeSystemId(systemId?: string) {
+  const value = (systemId || '').trim().toUpperCase();
+  const match = value.match(/^P(\d+)$/);
+
+  if (!match) {
+    return value;
+  }
+
+  return `P${match[1].padStart(2, '0')}`;
+}
+
+function getApiKeyForSystem(systemId?: string) {
+  const normalizedSystemId = normalizeSystemId(systemId);
+  if (!normalizedSystemId) {
+    return '';
+  }
+
+  const envKeyName = `API_KEY_${normalizedSystemId}`;
+  return process.env[envKeyName] || '';
+}
+
+async function fetchAllBackendIncidents(baseUrl: string) {
+  const allItems: any[] = [];
+  let page = 1;
+  let totalPages = 1;
+
+  do {
+    const url = new URL(`${baseUrl.replace(/\/$/, '')}/api/v1/incidentes`);
+    url.searchParams.set('page', String(page));
+    url.searchParams.set('limit', '100');
+
+    const res = await fetch(url.toString(), { cache: 'no-store' });
+
+    if (!res.ok) {
+      throw new Error(`backend_error_${res.status}`);
+    }
+
+    const json = await res.json();
+    const items: any[] = Array.isArray(json) ? json : (json.data ?? []);
+    allItems.push(...items);
+
+    const meta = Array.isArray(json) ? null : json.meta;
+    totalPages = meta?.total_paginas ?? page;
+    page += 1;
+  } while (page <= totalPages);
+
+  return allItems;
+}
+
 function mapBackendToFrontend(inc: any) {
   const prioridad = (inc.prioridad ?? 'MEDIA').toUpperCase();
   const severity: 'critical' | 'high' | 'medium' =
@@ -56,19 +105,7 @@ function mapBackendToFrontend(inc: any) {
 export async function GET() {
   if (BACKEND_URL) {
     try {
-      const url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/incidentes`;
-      const res = await fetch(url, { cache: 'no-store' });
-
-      if (!res.ok) {
-        return NextResponse.json(
-          { error: 'backend_error', status: res.status },
-          { status: res.status },
-        );
-      }
-
-      const json = await res.json();
-      // El backend envuelve la respuesta: { data: [...], meta: {...} }
-      const items: any[] = Array.isArray(json) ? json : (json.data ?? []);
+      const items = await fetchAllBackendIncidents(BACKEND_URL);
 
       return NextResponse.json(items.map(mapBackendToFrontend));
     } catch (err) {
@@ -85,15 +122,44 @@ export async function GET() {
 export async function POST(request: Request) {
   if (BACKEND_URL) {
     try {
-      const url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/incidentes`;
-      const body = await request.text();
+      const body = await request.json();
+      const sistemaId = normalizeSystemId(body.sistemaId || body.sistema_id || body.system);
+      const apiKey = getApiKeyForSystem(sistemaId);
+
+      if (!apiKey) {
+        return NextResponse.json(
+          { error: 'missing_api_key', sistemaId },
+          { status: 400 },
+        );
+      }
+
+      const url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/alertas`;
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body,
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': apiKey,
+        },
+        body: JSON.stringify({
+          sistema_id: sistemaId,
+          creado_en: new Date().toISOString(),
+          payload: {
+            titulo: body.titulo,
+            descripcion: body.descripcion,
+            prioridad: body.prioridad,
+          },
+        }),
       });
-      const data = await res.json();
-      return NextResponse.json(mapBackendToFrontend(data), { status: res.status });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        return NextResponse.json(
+          { error: 'backend_error', status: res.status, detail: errorText },
+          { status: res.status },
+        );
+      }
+
+      return NextResponse.json({ accepted: true }, { status: res.status });
     } catch (err) {
       console.error('[POST /api/incidents] Error:', err);
       return NextResponse.json({ error: 'connection_failed' }, { status: 502 });
@@ -102,7 +168,18 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const created = createIncident(body);
+    const created = createIncident({
+      ...body,
+      system: body.sistemaId || body.sistema_id || body.system,
+      severity:
+        (body.prioridad || body.severity) === 'CRITICA' || (body.prioridad || body.severity) === 'CRITICAL'
+          ? 'critical'
+          : (body.prioridad || body.severity) === 'ALTA' || (body.prioridad || body.severity) === 'HIGH'
+            ? 'high'
+            : 'medium',
+      description: body.descripcion || body.description || '',
+      affectedProject: body.sistemaId || body.sistema_id || body.affectedProject,
+    });
     return NextResponse.json(created, { status: 201 });
   } catch {
     return NextResponse.json({ error: 'invalid_payload' }, { status: 400 });
