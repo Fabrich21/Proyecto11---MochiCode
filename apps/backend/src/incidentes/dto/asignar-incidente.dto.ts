@@ -7,8 +7,8 @@ export class AsignarIncidenteDto implements IAsignarIncidenteDto {
   asignadoAUsuarioId!: string;
 
   @IsUUID()
-  @IsNotEmpty()
-  usuarioId!: string;
+  @IsOptional()
+  usuarioId?: string;
 
   /** Email del operador asignado (destinatario P6). Si se omite, usa P6_DEFAULT_EMAIL. */
   @IsEmail()
