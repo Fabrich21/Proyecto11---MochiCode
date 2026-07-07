@@ -1,10 +1,56 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Incident } from './incident-types';
-import { formatNumberES } from '@/lib/format';
+
+type ApiSystemOption = {
+  id?: string;
+  sistemaId?: string;
+  sistema_id?: string;
+  nombre?: string;
+  name?: string;
+};
+
+type SystemsResponse = {
+  data?: ApiSystemOption[];
+};
+
+function isSystemsResponse(value: unknown): value is SystemsResponse {
+  return typeof value === 'object' && value !== null && 'data' in value;
+}
 
 export default function SlaViewer({ incidents }: { incidents: Incident[] }) {
+  const [sistemasMap, setSistemasMap] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadSystems() {
+      try {
+        const res = await fetch('/api/systems');
+        if (res.ok) {
+          const data: unknown = await res.json();
+          const items = Array.isArray(data)
+            ? data
+            : isSystemsResponse(data)
+              ? data.data ?? []
+              : [];
+          const map: Record<string, string> = {};
+          items.forEach((s: ApiSystemOption) => {
+            const id = s.id ?? s.sistemaId ?? s.sistema_id;
+            const nombre = s.nombre ?? s.name ?? id ?? 'Sistema desconocido';
+            if (id) map[id] = nombre;
+          });
+          setSistemasMap(map);
+        }
+      } catch (error) {
+        console.error('Error loading systems:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadSystems();
+  }, []);
+
   const total = incidents.length;
   const inSla = incidents.filter((i) => (i.slaRemaining ?? 0) > 0).length;
   const compliance = total === 0 ? 100 : Math.round((inSla / total) * 100);
@@ -13,8 +59,21 @@ export default function SlaViewer({ incidents }: { incidents: Incident[] }) {
     .sort((a, b) => (b.slaPercentage ?? 0) - (a.slaPercentage ?? 0))
     .slice(0, 4);
 
+  // Función para obtener el nombre del sistema
+  const getSystemDisplay = (incident: Incident) => {
+    if (loading) return 'Cargando...';
+
+    const systemName = sistemasMap[incident.system];
+    if (systemName) {
+      return systemName;
+    }
+
+    return incident.system || 'Sistema desconocido';
+  };
+
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {/* Columna de cumplimiento SLA */}
       <div className="col-span-1 rounded-lg border border-border bg-white p-3 shadow-sm">
         <p className="text-xs font-medium text-foreground/60">Cumplimiento SLA</p>
         <p className="text-2xl font-bold text-accent mt-1">{compliance}%</p>
@@ -24,6 +83,7 @@ export default function SlaViewer({ incidents }: { incidents: Incident[] }) {
         </div>
       </div>
 
+      {/* Columna de mayor consumo SLA */}
       <div className="col-span-1 rounded-lg border border-border bg-white p-3 shadow-sm">
         <div className="flex items-center justify-between">
           <p className="text-xs font-medium text-foreground/60">Mayor consumo SLA</p>
@@ -34,20 +94,43 @@ export default function SlaViewer({ incidents }: { incidents: Incident[] }) {
           {topAtRisk.length === 0 ? (
             <div className="text-foreground/60 text-xs">No hay incidentes</div>
           ) : (
-            topAtRisk.map((inc) => (
-              <div key={inc.id} className="flex flex-col gap-1">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm">{inc.id}</div>
-                  <div className="text-xs text-foreground/70">{inc.slaPercentage ?? 0}%</div>
+            topAtRisk.map((inc) => {
+              const systemDisplay = getSystemDisplay(inc);
+              // Si el incidente tiene título, extraer la parte descriptiva
+              const titleDisplay = inc.title 
+                ? inc.title.replace(/^[^-]+-\s*/, '') // Remover el código del sistema si está en el título
+                : '';
+              
+              return (
+                <div key={inc.id} className="flex flex-col gap-1">
+                  <div className="flex items-center justify-between">
+                    <div className="text-sm font-medium text-foreground truncate">
+                      <span className="font-bold">{systemDisplay}</span>
+                      {titleDisplay && (
+                        <span className="text-xs text-foreground/60 ml-1">
+                          - {titleDisplay.length > 25 ? titleDisplay.slice(0, 25) + '...' : titleDisplay}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-xs text-foreground/70 ml-2 whitespace-nowrap">
+                      {inc.slaPercentage ?? 0}%
+                    </div>
+                  </div>
+                  <div className="w-full h-2 bg-secondary/10 rounded-full">
+                    <div
+                      className={`h-2 rounded-full ${
+                        inc.slaPercentage && inc.slaPercentage > 80 
+                          ? 'bg-destructive' 
+                          : inc.slaPercentage && inc.slaPercentage > 50 
+                            ? 'bg-warning' 
+                            : 'bg-success'
+                      }`}
+                      style={{ width: `${inc.slaPercentage ?? 0}%` }}
+                    />
+                  </div>
                 </div>
-                <div className="w-full h-2 bg-secondary/10 rounded-full">
-                  <div
-                    className={`h-2 rounded-full ${inc.slaPercentage && inc.slaPercentage > 80 ? 'bg-destructive' : inc.slaPercentage && inc.slaPercentage > 50 ? 'bg-warning' : 'bg-success'}`}
-                    style={{ width: `${inc.slaPercentage ?? 0}%` }}
-                  />
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>

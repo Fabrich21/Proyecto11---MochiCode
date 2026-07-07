@@ -3,20 +3,60 @@ import { createIncident } from '../../_incidentsStore';
 
 const BACKEND_URL = process.env.BACKEND_URL || '';
 
+function normalizeSystemId(systemId?: string) {
+  const value = (systemId || '').trim().toUpperCase();
+  const match = value.match(/^P(\d+)$/);
+
+  if (!match) {
+    return value;
+  }
+
+  return `P${match[1].padStart(2, '0')}`;
+}
+
+function getApiKeyForSystem(systemId?: string) {
+  const normalizedSystemId = normalizeSystemId(systemId);
+  if (!normalizedSystemId) {
+    return '';
+  }
+
+  const envKeyName = `API_KEY_${normalizedSystemId}`;
+  return process.env[envKeyName] || '';
+}
+
 export async function POST(request: Request) {
   if (BACKEND_URL) {
+    const payload = await request.json();
+    const sistemaId = normalizeSystemId(payload.sistema_id || payload.system || payload.sistemaId);
+    const apiKey = getApiKeyForSystem(sistemaId);
+
+    if (!apiKey) {
+      return NextResponse.json({ error: 'missing_api_key', sistemaId }, { status: 400 });
+    }
+
     const url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/alertas`;
-    const body = await request.text();
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 
-        'content-type': request.headers.get('content-type') || 'application/json',
-        'x-api-key': process.env.API_KEY_P08 || 'auth_p08_secret' // Llave requerida por ZeroTrustGuard
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': apiKey,
       },
-      body,
+      body: JSON.stringify({
+        sistema_id: sistemaId,
+        creado_en: payload.creado_en || new Date().toISOString(),
+        payload: payload.payload || payload,
+      }),
     });
-    const data = await res.text();
-    return new NextResponse(data, { status: res.status });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      return NextResponse.json(
+        { error: 'backend_error', status: res.status, detail: errorText },
+        { status: res.status },
+      );
+    }
+
+    return NextResponse.json({ accepted: true }, { status: res.status });
   }
 
   try {

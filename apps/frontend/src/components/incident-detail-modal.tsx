@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { X, Check, CheckCircle, Archive, Clock, Users } from 'lucide-react';
-import { Incident } from './incident-types';
+import { Incident, IncidenteEstado } from './incident-types';
 import { cn } from '@/lib/utils';
 import { formatDate, formatNumberES } from '@/lib/format';
 
@@ -14,9 +14,51 @@ interface Props {
   onCloseIncident: (i: Incident) => void;
 }
 
+// Limpia la descripción si viene como JSON del backend
+function cleanDescription(desc: string): string {
+  if (!desc) return 'Sin descripción';
+  try {
+    //extraer solo el título
+    const jsonMatch = desc.match(/Payload original:\s*(\{[\s\S]*\})/);
+    if (jsonMatch) {
+      try {
+        const payload = JSON.parse(jsonMatch[1]);
+        const titulo = payload.titulo || payload.title || '';
+        const descripcion = payload.descripcion || payload.description || '';
+        const prefix = desc.split('Payload original:')[0].trim();
+        return [prefix, titulo, descripcion].filter(Boolean).join(' — ');
+      } catch {
+        // Si no se puede parsear, quitar el bloque de payload
+        return desc.split('Payload original:')[0].trim();
+      }
+    }
+    return desc;
+  } catch {
+    return desc;
+  }
+}
+
+function getSeverityLabel(severity: string) {
+  switch (severity) {
+    case 'critical': return 'Crítico';
+    case 'high': return 'Alto';
+    case 'medium': return 'Medio';
+    default: return severity;
+  }
+}
+
 export function IncidentDetailModal({ incident, onClose, onAcknowledge, onResolve, onCloseIncident }: Props) {
+  const isClosed = incident.incidentStatus === IncidenteEstado.CERRADO || !!incident.closedAt;
+  const isResolved = !!incident.resolvedAt;
+  const isAcknowledged = !!incident.acknowledgedAt;
+  const cleanDesc = cleanDescription(incident.description);
+
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4 animate-fade-in" role="presentation" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/45 p-4 animate-fade-in"
+      role="presentation"
+      onClick={onClose}
+    >
       <section
         className="max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-xl border border-border bg-white shadow-2xl animate-scale-in"
         onClick={(e) => e.stopPropagation()}
@@ -26,10 +68,27 @@ export function IncidentDetailModal({ incident, onClose, onAcknowledge, onResolv
       >
         <header className="sticky top-0 z-10 border-b border-border bg-white px-6 py-4">
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-wide text-foreground/50">Detalle de incidente</p>
+            <div className="flex-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <p className="text-xs uppercase tracking-wide text-foreground/50">Detalle de incidente</p>
+                {isClosed && (
+                  <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-gray-100 text-gray-600 border border-gray-300">
+                    Cerrado
+                  </span>
+                )}
+                {!isClosed && isAcknowledged && (
+                  <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700 border border-blue-300">
+                    En Progreso
+                  </span>
+                )}
+                {!isClosed && !isAcknowledged && (
+                  <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-yellow-100 text-yellow-700 border border-yellow-300">
+                    Sin reconocer
+                  </span>
+                )}
+              </div>
               <h3 id="incident-detail-title" className="mt-1 text-xl font-bold text-foreground">
-                {incident.title || incident.id}
+                {incident.title || incident.system || incident.id}
               </h3>
             </div>
             <button
@@ -45,18 +104,22 @@ export function IncidentDetailModal({ incident, onClose, onAcknowledge, onResolv
 
         <div className="space-y-6 px-6 py-5">
           <div className="flex flex-wrap items-center gap-3">
-            <span className={cn('rounded-full border px-3 py-1 text-xs font-semibold', incident.severity === 'critical' ? 'text-[#E94B3C]' : incident.severity === 'high' ? 'text-[#F59E0B]' : 'text-[#3B82F6]')}>
-              Severidad: {incident.severity}
+            <span className={cn('rounded-full border px-3 py-1 text-xs font-semibold',
+              incident.severity === 'critical' ? 'text-[#E94B3C] border-[#E94B3C]' :
+              incident.severity === 'high' ? 'text-[#F59E0B] border-[#F59E0B]' : 'text-[#3B82F6] border-[#3B82F6]'
+            )}>
+              Severidad: {getSeverityLabel(incident.severity)}
             </span>
             <span className="rounded-full border border-border bg-secondary/20 px-3 py-1 text-xs font-medium text-foreground/80">
               Sistema: {incident.system}
             </span>
           </div>
 
+          {/* Descripción limpia */}
           <div>
-            <p className="text-sm font-semibold text-foreground/70">Descripcion</p>
+            <p className="text-sm font-semibold text-foreground/70">Descripción</p>
             <p className="mt-2 rounded-lg border border-border bg-secondary/10 p-4 text-sm leading-relaxed text-foreground">
-              {incident.description}
+              {cleanDesc}
             </p>
           </div>
 
@@ -72,48 +135,50 @@ export function IncidentDetailModal({ incident, onClose, onAcknowledge, onResolv
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <InfoBlock label="Proyecto afectado" value={incident.affectedProject || 'No reportado'} />
-            <InfoBlock label="Status del incidente" value={incident.incidentStatus || 'No reportado'} />
+            <InfoBlock label="Sistema afectado" value={incident.affectedProject || incident.system || 'No reportado'} />
+            <InfoBlock label="Estado" value={incident.incidentStatus || 'No reportado'} />
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <InfoBlock label="reconocido" value={formatDate(incident.acknowledgedAt as any)} />
-            <InfoBlock label="resuelto" value={formatDate(incident.resolvedAt as any)} />
-            <InfoBlock label="cerrado" value={formatDate(incident.closedAt as any)} />
+            <InfoBlock label="Reconocido" value={formatDate(incident.acknowledgedAt as any)} />
+            <InfoBlock label="Resuelto" value={formatDate(incident.resolvedAt as any)} />
+            <InfoBlock label="Cerrado" value={formatDate(incident.closedAt as any)} />
           </div>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <InfoBlock label="SLA minutos previstos" value={incident.slaTargetMinutes ?? 'No definido'} />
-          </div>
+          {incident.slaTargetMinutes && (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <InfoBlock label="SLA minutos previstos" value={`${incident.slaTargetMinutes} min`} />
+            </div>
+          )}
         </div>
 
         <footer className="flex items-center justify-end gap-3 border-t border-border px-6 py-4">
-          <button
-            type="button"
-            onClick={() => onAcknowledge(incident)}
-            disabled={!!incident.acknowledgedAt}
-            className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium transition disabled:opacity-50"
-          >
-            <Check className="h-4 w-4" /> Reconocido
-          </button>
+          {!isClosed && (
+            <>
+              <button
+                type="button"
+                onClick={() => onAcknowledge(incident)}
+                disabled={isAcknowledged}
+                className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium transition disabled:opacity-50"
+              >
+                <Check className="h-4 w-4" /> Reconocer
+              </button>
 
-          <button
-            type="button"
-            onClick={() => onResolve(incident)}
-            disabled={!!incident.resolvedAt}
-            className="inline-flex items-center gap-2 rounded-md border border-border bg-success/10 px-3 py-2 text-sm font-medium transition disabled:opacity-50"
-          >
-            <CheckCircle className="h-4 w-4" /> Resuelto
-          </button>
+              <button
+                type="button"
+                onClick={() => onCloseIncident(incident)}
+                className="inline-flex items-center gap-2 rounded-md border border-border bg-destructive/10 px-3 py-2 text-sm font-medium transition text-red-700"
+              >
+                <Archive className="h-4 w-4" /> Cerrar incidente
+              </button>
+            </>
+          )}
 
-          <button
-            type="button"
-            onClick={() => onCloseIncident(incident)}
-            disabled={!!incident.closedAt}
-            className="inline-flex items-center gap-2 rounded-md border border-border bg-destructive/10 px-3 py-2 text-sm font-medium transition disabled:opacity-50"
-          >
-            <Archive className="h-4 w-4" /> Cerrado
-          </button>
+          {isClosed && (
+            <span className="text-sm text-gray-500 font-medium">
+              ✓ Incidente cerrado — {formatDate(incident.closedAt as any)}
+            </span>
+          )}
         </footer>
       </section>
     </div>
