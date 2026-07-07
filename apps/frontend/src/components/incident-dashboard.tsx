@@ -104,6 +104,7 @@ export function IncidentDashboard() {
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [showNewModal, setShowNewModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
@@ -139,17 +140,23 @@ export function IncidentDashboard() {
 
   async function loadIncidents() {
     try {
+      setLoading(true);
+      setErrorMsg(null);
       const res = await fetch('/api/incidents', {
         headers: {
           'Authorization': `Bearer ${keycloak?.token || ''}`
         }
       });
-      if (!res.ok) throw new Error('fetch_failed');
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`fetch_failed: ${res.status} - ${text}`);
+      }
       const data = await res.json();
       const items = Array.isArray(data) ? data : (data.data ?? []);
       setIncidents(items as Incident[]);
-    } catch (err) {
+    } catch (err: any) {
       console.error('[incidents] error:', err);
+      setErrorMsg(err.message || 'Error desconocido al cargar incidentes');
     } finally {
       setLoading(false);
     }
@@ -350,6 +357,11 @@ export function IncidentDashboard() {
           {loading ? (
             <div className="rounded-lg border border-border bg-white p-8 text-center shadow-sm">
               <p className="text-foreground/60">Cargando incidentes...</p>
+            </div>
+          ) : errorMsg ? (
+            <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-8 text-center shadow-sm">
+              <p className="font-semibold text-destructive">Error al cargar incidentes</p>
+              <p className="mt-2 text-sm text-destructive/80">{errorMsg}</p>
             </div>
           ) : paginatedIncidents.length > 0 ? (
             paginatedIncidents.map((incident) => (

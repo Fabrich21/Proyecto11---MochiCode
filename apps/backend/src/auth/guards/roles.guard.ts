@@ -30,7 +30,7 @@ export class RolesGuard implements CanActivate {
 
     // Gate Global: Verifica que el usuario tenga permiso base para entrar a nuestra app
     const accessRole = `${user.clientId}-access`;
-    if (user.realmRoles && !user.realmRoles.includes(accessRole)) {
+    if (user.roles && !user.roles.includes(accessRole)) {
       throw new ForbiddenException(`No tienes permiso global para acceder a esta aplicación (${accessRole} requerido)`);
     }
 
