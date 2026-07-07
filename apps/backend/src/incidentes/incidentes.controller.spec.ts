@@ -9,6 +9,7 @@ describe('IncidentesController', () => {
 
   // Creamos un mock del servicio para no tocar la base de datos real
   const mockIncidentesService = {
+    create: jest.fn(),
     findAll: jest.fn(),
     cambiarEstado: jest.fn(),
   };
@@ -51,6 +52,26 @@ describe('IncidentesController', () => {
 
       // Afirmar (Assert)
       expect(service.findAll).toHaveBeenCalledWith(query);
+      expect(result).toEqual(mockResult);
+    });
+  });
+
+  describe('create', () => {
+    it('debería llamar al servicio para crear un incidente manual', async () => {
+      const createDto = {
+        titulo: 'Caida de servicio',
+        descripcion: 'Errores 503 intermitentes',
+        sistemaId: 'P04',
+        creadorUsuarioId: 'f7b6d624-bcd8-4f44-b988-f1ce4f6fbb7d',
+        prioridad: 'ALTA',
+        estado: IncidenteEstado.ABIERTO,
+      };
+      const mockResult = { id: 'uuid-123', ...createDto };
+      mockIncidentesService.create.mockResolvedValue(mockResult);
+
+      const result = await controller.create(createDto);
+
+      expect(service.create).toHaveBeenCalledWith(createDto);
       expect(result).toEqual(mockResult);
     });
   });

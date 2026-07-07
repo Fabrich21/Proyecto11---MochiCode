@@ -10,6 +10,8 @@ import { NotFoundException } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { of, throwError } from 'rxjs';
+import { PoliticaSla } from '../database/entities/politica-sla.entity';
+import { Sistema } from '../database/entities/sistema.entity';
 import { EventsGateway } from '../events/events.gateway';
 import { P6NotificacionesService } from '../p6-notificaciones/p6-notificaciones.service';
 
@@ -31,6 +33,15 @@ describe('IncidentesService', () => {
 
   const mockHistorialRepository = {};
 
+  const mockPoliticaSlaRepository = {
+    findOne: jest.fn(),
+  };
+
+  const mockSistemaRepository = {
+    findOne: jest.fn(),
+  };
+
+  // Emulamos las transacciones de TypeORM
   const mockQueryRunner = {
     connect: jest.fn(),
     startTransaction: jest.fn(),
@@ -38,6 +49,7 @@ describe('IncidentesService', () => {
     rollbackTransaction: jest.fn(),
     release: jest.fn(),
     manager: {
+      create: jest.fn(),
       findOne: jest.fn(),
       save: jest.fn(),
     },
@@ -88,6 +100,14 @@ describe('IncidentesService', () => {
         {
           provide: getRepositoryToken(Auditoria),
           useValue: mockAuditoriaRepository,
+        },
+        {
+          provide: getRepositoryToken(PoliticaSla),
+          useValue: mockPoliticaSlaRepository,
+        },
+        {
+          provide: getRepositoryToken(Sistema),
+          useValue: mockSistemaRepository,
         },
         {
           provide: DataSource,
@@ -143,6 +163,69 @@ describe('IncidentesService', () => {
 
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('incidente.estado = :estado', { estado: IncidenteEstado.ABIERTO });
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('incidente.sistemaId = :sistema_id', { sistema_id: 'P08' });
+    });
+  });
+
+  describe('create', () => {
+    it('debería crear un incidente manual, historial y auditoría', async () => {
+      const createDto = {
+        titulo: 'Caida de servicio',
+        descripcion: 'Errores 503 intermitentes',
+        sistemaId: 'P04',
+        creadorUsuarioId: 'f7b6d624-bcd8-4f44-b988-f1ce4f6fbb7d',
+        prioridad: 'ALTA',
+        estado: IncidenteEstado.ABIERTO,
+      };
+      const incidenteCreado = {
+        id: 'inc-1',
+        ...createDto,
+        politicaSlaId: 'sla-1',
+      };
+
+      mockSistemaRepository.findOne.mockResolvedValue({ sistemaId: 'P04' });
+      mockPoliticaSlaRepository.findOne.mockResolvedValue({
+        id: 'sla-1',
+        nombre: 'ALTA',
+        tiempoMaximoResolucionMinutos: 240,
+      });
+      mockQueryRunner.manager.create.mockReturnValue({
+        ...createDto,
+        politicaSlaId: 'sla-1',
+      });
+      mockQueryRunner.manager.save
+        .mockResolvedValueOnce(incidenteCreado)
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({});
+
+      const result = await service.create(createDto);
+
+      expect(mockSistemaRepository.findOne).toHaveBeenCalledWith({ where: { sistemaId: 'P04' } });
+      expect(mockPoliticaSlaRepository.findOne).toHaveBeenCalledWith({ where: { nombre: 'ALTA' } });
+      expect(mockQueryRunner.manager.create).toHaveBeenCalledWith(
+        Incidente,
+        expect.objectContaining({
+          titulo: createDto.titulo,
+          sistemaId: createDto.sistemaId,
+          creadorUsuarioId: createDto.creadorUsuarioId,
+          politicaSlaId: 'sla-1',
+        }),
+      );
+      expect(mockQueryRunner.manager.save).toHaveBeenCalledTimes(3);
+      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
+      expect(result).toEqual(incidenteCreado);
+    });
+
+    it('debería lanzar NotFoundException si el sistema no existe', async () => {
+      mockSistemaRepository.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.create({
+          titulo: 'Caida de servicio',
+          sistemaId: 'P04',
+          creadorUsuarioId: 'f7b6d624-bcd8-4f44-b988-f1ce4f6fbb7d',
+          prioridad: 'ALTA',
+        }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
