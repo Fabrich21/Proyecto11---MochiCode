@@ -34,10 +34,12 @@ export class PayloadNormalizerService {
     // Grupo 1 — Salud
     // Formato: { eventId, source, eventType, occurredAt, severity, status, ... }
     P1: normalizeP1Salud,
+    P01: normalizeP1Salud,
 
     // Grupo 3 — Pedidos
     // Formato: { source, event_type, payload: { order_id, customer_id, ... } }
     P3: normalizeP3Pedidos,
+    P03: normalizeP3Pedidos,
 
     // Grupo 4 — Pasarela de pagos
     // Formato: { tipo, error, id_transaccion, ... } y conciliaciones
@@ -47,6 +49,7 @@ export class PayloadNormalizerService {
     // Grupo 5 — Inventario
     // Formato: { source, event_type, project_id, created_at, payload: { ... } }
     P5: normalizeP5Inventario,
+    P05: normalizeP5Inventario,
 
     // Grupo 7 — CRM
     // Formato: ticket CRM con campos estandarizados (titulo, descripcion, prioridad, estado)
@@ -58,10 +61,12 @@ export class PayloadNormalizerService {
     //  - Plano camelCase: { eventId, eventType, occurredAt, source, ... }
     //  - Estandarizado:     { source, event_type, payload: { event_id, ... } }
     P8: normalizeP8Iot,
+    P08: normalizeP8Iot,
 
     // Grupo 9 — Analítica
     // Formato: { source, event_type, payload: { incident_id, severity, status, ... } }
     P9: normalizeP9Analitica,
+    P09: normalizeP9Analitica,
   };
 
   /**

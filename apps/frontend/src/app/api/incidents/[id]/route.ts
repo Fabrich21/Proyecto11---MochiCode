@@ -58,7 +58,8 @@ export async function PATCH(
         body: JSON.stringify({
           estado: estadoNuevo,
           // TODO: reemplazar por el JWT.sub cuando P12 (Zero Trust) esté integrado
-          usuarioId: '00000000-0000-0000-0000-000000000001',
+          // Usando un UUIDv4 válido para que el ValidationPipe de NestJS no rechace la petición (Error 400)
+          usuarioId: '123e4567-e89b-12d3-a456-426614174000',
         }),
       });
  

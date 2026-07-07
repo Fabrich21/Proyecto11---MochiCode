@@ -105,6 +105,7 @@ export class WorkerService {
       const incidenteActivo = await incidenteRepo.findOne({
         where: {
           sistemaId: dto.sistema_id,
+          titulo: normalizado.titulo, // Deduplicación fina (ej: 1 ticket por sensor/falla)
           estado: In([IncidenteEstado.ABIERTO, IncidenteEstado.EN_PROGRESO]),
         },
         order: { creadoEn: 'DESC' },
