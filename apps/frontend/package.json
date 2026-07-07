@@ -28,5 +28,8 @@
   "devDependencies": {
     "eslint": "^9",
     "eslint-config-next": "16.2.4"
+  },
+  "optionalDependencies": {
+    "lightningcss-linux-x64-gnu": "^1.32.0"
   }
 }
