@@ -10,7 +10,6 @@ import { HistorialEstado } from '../database/entities/historial-estado.entity';
 import { Auditoria } from '../database/entities/auditoria.entity';
 import { GetIncidentesDto } from './dto/get-incidentes.dto';
 import { UpdateEstadoIncidenteDto } from './dto/update-estado-incidente.dto';
-import { ConfigService } from '@nestjs/config';
 import { PoliticaSla } from '../database/entities/politica-sla.entity';
 import { SlaUtil } from '../common/utils/sla.util';
 import { CreateIncidenteDto } from './dto/create-incidente.dto';

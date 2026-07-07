@@ -1,7 +1,6 @@
 import { IsEmail, IsNotEmpty, IsOptional, IsUUID } from 'class-validator';
-import { IAsignarIncidenteDto } from '@proyecto/shared-types';
 
-export class AsignarIncidenteDto implements IAsignarIncidenteDto {
+export class AsignarIncidenteDto {
   @IsUUID()
   @IsNotEmpty()
   asignadoAUsuarioId!: string;
