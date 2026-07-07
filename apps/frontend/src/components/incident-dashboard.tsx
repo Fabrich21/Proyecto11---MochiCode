@@ -1,34 +1,32 @@
 'use client';
 
 import { useState, useMemo, useEffect } from 'react';
-import { Search } from 'lucide-react';
+import { Search, Plus } from 'lucide-react';
 import { IncidentCard } from './incident-card';
 import { Incident } from './incident-types';
 import IncidentDetailModal from './incident-detail-modal';
 import SlaViewer from './sla-viewer';
+import { NewIncidentModal } from './new-incident-modal';
 import { useWebSockets } from '../hooks/useWebSockets';
-
 import { IncidenteEstado } from './incident-types';
 
-// Helper para mapear el formato del backend al frontend
 function mapBackendIncident(backendIncidente: any): Incident {
   const prioridadMap: Record<string, string> = {
     CRITICA: 'critical',
     ALTA: 'high',
     MEDIA: 'medium',
-    BAJA: 'medium', // Fallback visual
+    BAJA: 'medium',
   };
 
   let slaRemaining = 0;
   let slaPercentage = 0;
-  let slaTargetMinutes = 60; // Fallback default
+  let slaTargetMinutes = 60;
 
   const limiteSla = backendIncidente.fechaLimiteResolucion || backendIncidente.fecha_limite_resolucion;
   if (limiteSla) {
     const now = new Date();
     const limite = new Date(limiteSla);
     slaRemaining = Math.max(0, Math.round((limite.getTime() - now.getTime()) / 60000));
-    
     if (backendIncidente.politicaSla?.tiempoMaximoResolucionMinutos) {
       slaTargetMinutes = backendIncidente.politicaSla.tiempoMaximoResolucionMinutos;
     }
@@ -48,118 +46,43 @@ function mapBackendIncident(backendIncidente: any): Incident {
     createdAt: backendIncidente.creadoEn || new Date(),
     incidentStatus: backendIncidente.estado || IncidenteEstado.ABIERTO,
     slaTargetMinutes,
+    affectedProject: backendIncidente.sistemaId ?? null,
+    affectedUsers: backendIncidente.affectedUsers ?? null,
+    acknowledgedAt: backendIncidente.acknowledgedAt ?? null,
+    resolvedAt: backendIncidente.fechaResolucion ?? null,
+    closedAt: backendIncidente.estado === 'CERRADO' ? (backendIncidente.fechaResolucion ?? new Date().toISOString()) : null,
   };
 }
 
-/*const mockIncidents: Incident[] = [
-  {
-    id: 'INC-2024-0042',
-    severity: 'critical',
-    system: 'Pagos',
-    description: 'Caída total del servicio de procesamiento de pagos. Base de datos no responde a queries.',
-    slaRemaining: 15,
-    slaPercentage: 25,
-    createdAt: new Date(Date.now() - 45 * 60000),
-    affectedUsers: 2400,
-    affectedProject: 'pagos',
-    incidentStatus: IncidenteEstado.ABIERTO,
-    acknowledgedAt: null,
-    resolvedAt: null,
-    closedAt: null,
-    slaTargetMinutes: 60,
-  },
-  {
-    id: 'INC-2024-0041',
-    severity: 'high',
-    system: 'Logística',
-    description: 'Retrasos en actualización de rastreo de envíos. Latencia elevada en API.',
-    slaRemaining: 35,
-    slaPercentage: 58,
-    createdAt: new Date(Date.now() - 22 * 60000),
-    affectedUsers: 8900,
-    affectedProject: 'logistica',
-    incidentStatus: IncidenteEstado.EN_PROGRESO,
-    acknowledgedAt: new Date(Date.now() - 20 * 60000),
-    resolvedAt: null,
-    closedAt: null,
-    slaTargetMinutes: 120,
-  },
-  {
-    id: 'INC-2024-0040',
-    severity: 'high',
-    system: 'API Gateway',
-    description: '50% de requests retornando 503. Uno de los servidores está sobrecargado.',
-    slaRemaining: 20,
-    slaPercentage: 67,
-    createdAt: new Date(Date.now() - 13 * 60000),
-    affectedUsers: 5200,
-    affectedProject: 'api-gateway',
-    incidentStatus: IncidenteEstado.EN_PROGRESO,
-    acknowledgedAt: new Date(Date.now() - 12 * 60000),
-    resolvedAt: null,
-    closedAt: null,
-    slaTargetMinutes: 90,
-  },
-  {
-    id: 'INC-2024-0039',
-    severity: 'medium',
-    system: 'Cache Redis',
-    description: 'Degradación en performance del cache. Misses aumentaron a 45%.',
-    slaRemaining: 85,
-    slaPercentage: 85,
-    createdAt: new Date(Date.now() - 8 * 60000),
-  },
-  {
-    id: 'INC-2024-0038',
-    severity: 'medium',
-    system: 'Salud',
-    description: 'Interrupción parcial en el servicio de consultas médicas.',
-    slaRemaining: 60,
-    slaPercentage: 40,
-    createdAt: new Date(Date.now() - 90 * 60000),
-    affectedUsers: 1200,
-    affectedProject: 'salud',
-    incidentStatus: IncidenteEstado.CERRADO, // replaced resuelto with CERRADO to match enum
-    acknowledgedAt: new Date(Date.now() - 85 * 60000),
-    resolvedAt: new Date(Date.now() - 30 * 60000),
-    closedAt: null,
-    slaTargetMinutes: 180,
-  },
-];
-*/
 export function IncidentDashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSeverity, setSelectedSeverity] = useState<string | null>(null);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [incidents, setIncidents] = useState<Incident[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showNewModal, setShowNewModal] = useState(false);
 
-  // Hook de WebSockets para actualizaciones en tiempo real
   const { isConnected } = useWebSockets({
     room: 'dashboard_incidentes',
     onNuevoIncidente: (incidenteBackend) => {
-      console.log('Nuevo incidente recibido vía WS:', incidenteBackend);
       const newIncident = mapBackendIncident(incidenteBackend);
       setIncidents((prev) => [newIncident, ...prev]);
     },
     onEstadoActualizado: ({ incidenteId, nuevoEstado }) => {
-      console.log('Cambio de estado recibido vía WS:', incidenteId, nuevoEstado);
       setIncidents((prev) =>
         prev.map((i) => (i.id === incidenteId ? { ...i, incidentStatus: nuevoEstado } : i))
       );
     },
-    onIncidenteActualizado: ({ incidenteId, nuevo_evento }) => {
-      console.log('Incidente actualizado (evento agregado) vía WS:', incidenteId);
-      // Opcional: podrías mostrar una notificación visual aquí
+    onIncidenteActualizado: ({ incidenteId }: { incidenteId: string; nuevo_evento: any }) => {
+      console.log('Incidente actualizado vía WS:', incidenteId);
     },
   });
 
   useEffect(() => {
     if (!selectedIncident) return;
-
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') setSelectedIncident(null);
     };
-
     document.body.style.overflow = 'hidden';
     window.addEventListener('keydown', onKeyDown);
     return () => {
@@ -168,39 +91,27 @@ export function IncidentDashboard() {
     };
   }, [selectedIncident]);
 
-  useEffect(() => {
-    let mounted = true;
-
-    async function load() {
-      try {
-        const res = await fetch('/api/incidents');
-        if (!res.ok) throw new Error('fetch_failed');
-        const data = await res.json();
-        if (!mounted) return;
-        
-        // Si el backend devuelve { data: [...] } (paginación) o un array directo
-        const items = data.data && Array.isArray(data.data) ? data.data : (Array.isArray(data) ? data : []);
-        
-        if (items.length > 0) {
-          // The items from /api/incidents are already mapped to the Incident interface by route.ts
-          setIncidents(items as Incident[]);
-        }
-      } catch (err) {
-        console.error('[incidents] error:', err);
-      }
+  async function loadIncidents() {
+    try {
+      const res = await fetch('/api/incidents');
+      if (!res.ok) throw new Error('fetch_failed');
+      const data = await res.json();
+      const items = Array.isArray(data) ? data : (data.data ?? []);
+      setIncidents(items as Incident[]);
+    } catch (err) {
+      console.error('[incidents] error:', err);
+    } finally {
+      setLoading(false);
     }
+  }
 
-    load();
-    return () => {
-      mounted = false;
-    };
+  useEffect(() => {
+    loadIncidents();
   }, []);
 
   function updateIncident(updated: Incident) {
     setIncidents((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
     setSelectedIncident(updated);
-
-    // Optimistic persist to backend
     (async () => {
       try {
         await fetch(`/api/incidents/${encodeURIComponent(updated.id)}`, {
@@ -209,15 +120,20 @@ export function IncidentDashboard() {
           body: JSON.stringify(updated),
         });
       } catch (err) {
-        console.error('[incidents] error:', err);
-        // ignore network errors for now
+        console.error('[incidents] patch error:', err);
       }
     })();
   }
 
   function handleAcknowledge(incident: Incident) {
     if (incident.acknowledgedAt) return;
-    updateIncident({ ...incident, acknowledgedAt: new Date(), incidentStatus: incident.incidentStatus === IncidenteEstado.ABIERTO ? IncidenteEstado.EN_PROGRESO : incident.incidentStatus });
+    updateIncident({
+      ...incident,
+      acknowledgedAt: new Date(),
+      incidentStatus: incident.incidentStatus === IncidenteEstado.ABIERTO
+        ? IncidenteEstado.EN_PROGRESO
+        : incident.incidentStatus,
+    });
   }
 
   function handleResolve(incident: Incident) {
@@ -230,10 +146,17 @@ export function IncidentDashboard() {
     updateIncident({ ...incident, closedAt: new Date(), incidentStatus: IncidenteEstado.CERRADO });
   }
 
+  function handleIncidentCreated() {
+    // Recargar lista tras crear incidente
+    setLoading(true);
+    loadIncidents();
+  }
+
   const filteredIncidents = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return incidents.filter((incident) => {
-      const matchesSearch = !q || [incident.id, incident.system, incident.description].some((s) => s.toLowerCase().includes(q));
+      const matchesSearch = !q || [incident.id, incident.system, incident.description, incident.title ?? '']
+        .some((s) => s.toLowerCase().includes(q));
       const matchesSeverity = !selectedSeverity || incident.severity === selectedSeverity;
       return matchesSearch && matchesSeverity;
     });
@@ -267,14 +190,14 @@ export function IncidentDashboard() {
           <select
             value={selectedSeverity || ''}
             onChange={(e) => setSelectedSeverity(e.target.value || null)}
-            className="flex items-center gap-2 rounded-lg border border-border bg-white px-4 py-2 font-medium text-foreground transition-colors hover:bg-secondary/20 cursor-pointer"
+            className="rounded-lg border border-border bg-white px-4 py-2 font-medium text-foreground transition-colors hover:bg-secondary/20 cursor-pointer"
           >
             <option value="">Todos</option>
             <option value="critical">Críticos</option>
             <option value="high">Altos</option>
             <option value="medium">Medios</option>
           </select>
-          
+
           <div className="flex items-center gap-2 px-3 rounded-lg border border-border bg-white shadow-sm">
             <span className="relative flex h-3 w-3">
               <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isConnected ? 'bg-green-400' : 'bg-red-400'}`}></span>
@@ -284,6 +207,16 @@ export function IncidentDashboard() {
               {isConnected ? 'Live' : 'Desconectado'}
             </span>
           </div>
+
+          {/* Botón Nuevo Incidente */}
+          <button
+            type="button"
+            onClick={() => setShowNewModal(true)}
+            className="inline-flex items-center gap-2 rounded-lg bg-[#3C6E71] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#2d5558] transition-colors"
+          >
+            <Plus className="h-4 w-4" />
+            Nuevo incidente
+          </button>
         </div>
       </div>
 
@@ -307,27 +240,43 @@ export function IncidentDashboard() {
         </div>
       </div>
 
-      {/* SLA Viewer (compact) */}
+      {/* SLA Viewer */}
       <div className="mt-2">
         <SlaViewer incidents={incidents} />
       </div>
 
       {/* Incidents List */}
       <div className="space-y-4">
-        <h2 className="text-lg font-bold text-foreground">Incidentes Activos</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-foreground">Incidentes</h2>
+          <span className="text-sm text-foreground/50">{sortedIncidents.length} resultado{sortedIncidents.length !== 1 ? 's' : ''}</span>
+        </div>
         <div className="space-y-3">
-          {sortedIncidents.length > 0 ? (
+          {loading ? (
+            <div className="rounded-lg border border-border bg-white p-8 text-center shadow-sm">
+              <p className="text-foreground/60">Cargando incidentes...</p>
+            </div>
+          ) : sortedIncidents.length > 0 ? (
             sortedIncidents.map((incident) => (
               <IncidentCard key={incident.id} incident={incident} onClick={() => setSelectedIncident(incident)} />
             ))
           ) : (
             <div className="rounded-lg border border-border bg-white p-8 text-center shadow-sm">
-              <p className="text-foreground/60">No hay incidentes que coincidan con los filtros</p>
+              <p className="text-foreground/60">No hay incidentes registrados</p>
+              <button
+                type="button"
+                onClick={() => setShowNewModal(true)}
+                className="mt-3 inline-flex items-center gap-2 rounded-lg bg-[#3C6E71] px-4 py-2 text-sm font-semibold text-white hover:bg-[#2d5558] transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                Registrar primer incidente
+              </button>
             </div>
           )}
         </div>
       </div>
 
+      {/* Modal detalle */}
       {selectedIncident && (
         <IncidentDetailModal
           incident={selectedIncident}
@@ -335,6 +284,14 @@ export function IncidentDashboard() {
           onAcknowledge={handleAcknowledge}
           onResolve={handleResolve}
           onCloseIncident={handleCloseIncident}
+        />
+      )}
+
+      {/* Modal nuevo incidente */}
+      {showNewModal && (
+        <NewIncidentModal
+          onClose={() => setShowNewModal(false)}
+          onCreated={handleIncidentCreated}
         />
       )}
     </div>

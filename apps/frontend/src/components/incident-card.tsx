@@ -3,7 +3,7 @@
 import { AlertTriangle, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
-import { Incident } from './incident-types';
+import { Incident, IncidenteEstado } from './incident-types';
 
 export interface IncidentCardProps {
   incident: Incident;
@@ -12,32 +12,40 @@ export interface IncidentCardProps {
 
 function getSeverityColor(severity: string) {
   switch (severity) {
-    case 'critical':
-      return 'bg-[#E94B3C]/20 border-[#E94B3C] text-[#E94B3C]';
-    case 'high':
-      return 'bg-[#F59E0B]/20 border-[#F59E0B] text-[#F59E0B]';
-    case 'medium':
-      return 'bg-[#3B82F6]/20 border-[#3B82F6] text-[#3B82F6]';
-    default:
-      return 'bg-[#D9D9D9]/20 border-[#D9D9D9] text-[#D9D9D9]';
+    case 'critical': return 'bg-[#E94B3C]/20 border-[#E94B3C] text-[#E94B3C]';
+    case 'high': return 'bg-[#F59E0B]/20 border-[#F59E0B] text-[#F59E0B]';
+    case 'medium': return 'bg-[#3B82F6]/20 border-[#3B82F6] text-[#3B82F6]';
+    default: return 'bg-[#D9D9D9]/20 border-[#D9D9D9] text-[#D9D9D9]';
   }
 }
 
 function getSeverityLabel(severity: string) {
   switch (severity) {
-    case 'critical':
-      return 'Crítico';
-    case 'high':
-      return 'Alto';
-    case 'medium':
-      return 'Medio';
+    case 'critical': return 'Crítico';
+    case 'high': return 'Alto';
+    case 'medium': return 'Medio';
+    default: return 'Desconocido';
+  }
+}
+
+function getStatusBadge(status?: string) {
+  switch (status) {
+    case IncidenteEstado.CERRADO:
+      return { label: 'Cerrado', className: 'bg-gray-100 text-gray-600 border-gray-300' };
+    case IncidenteEstado.EN_PROGRESO:
+      return { label: 'En Progreso', className: 'bg-blue-100 text-blue-700 border-blue-300' };
+    case 'VENCIDO':
+      return { label: 'Vencido', className: 'bg-red-100 text-red-700 border-red-300' };
+    case IncidenteEstado.ABIERTO:
     default:
-      return 'Desconocido';
+      return { label: 'Abierto', className: 'bg-yellow-100 text-yellow-700 border-yellow-300' };
   }
 }
 
 export function IncidentCard({ incident, onClick }: IncidentCardProps) {
   const [timeAgoText, setTimeAgoText] = useState<string>('');
+  const statusBadge = getStatusBadge(incident.incidentStatus as string);
+  const isClosed = incident.incidentStatus === IncidenteEstado.CERRADO;
 
   useEffect(() => {
     const timeAgo = Math.floor((Date.now() - new Date(incident.createdAt).getTime()) / 60000);
@@ -51,6 +59,7 @@ export function IncidentCard({ incident, onClick }: IncidentCardProps) {
         'rounded-lg border border-[#D9D9D9] bg-white p-4 transition-colors hover:bg-[#F5F5F5] transform transition-transform duration-200 ease-out',
         'hover:-translate-y-1 hover:shadow-lg',
         'animate-fade-up',
+        isClosed ? 'opacity-60' : '',
         onClick ? 'cursor-pointer focus-within:ring-2 focus-within:ring-[#3C6E71]/40' : ''
       )}
     >
@@ -69,15 +78,14 @@ export function IncidentCard({ incident, onClick }: IncidentCardProps) {
             disabled={!onClick}
             aria-label={onClick ? `Ver detalle del incidente ${incident.id}` : undefined}
           >
-            <div className="flex items-center gap-3 mb-2">
+            <div className="flex items-center gap-3 mb-2 flex-wrap">
               <span className="text-sm font-mono text-[#353535]">{incident.id}</span>
-              <span
-                className={cn(
-                  'px-2 py-1 rounded text-xs font-semibold border',
-                  getSeverityColor(incident.severity)
-                )}
-              >
+              <span className={cn('px-2 py-1 rounded text-xs font-semibold border', getSeverityColor(incident.severity))}>
                 {getSeverityLabel(incident.severity)}
+              </span>
+              {/* Badge de estado */}
+              <span className={cn('px-2 py-1 rounded-full text-xs font-semibold border', statusBadge.className)}>
+                {statusBadge.label}
               </span>
               <span className="text-xs text-[#353535]">{timeAgoText}</span>
             </div>
@@ -96,23 +104,27 @@ export function IncidentCard({ incident, onClick }: IncidentCardProps) {
           )}
         </div>
 
-        {/* SLA */}
-        <div className="text-right">
-          <div className="text-sm font-semibold text-[#353535]">{incident.slaRemaining}m</div>
-          <div className="h-1 w-16 rounded-full bg-[#D9D9D9] mt-2 overflow-hidden">
-            <div
-              className={cn(
-                'h-full transition-colors',
-                incident.slaPercentage > 50
-                  ? 'bg-[#3C6E71]'
-                  : incident.slaPercentage > 25
-                  ? 'bg-[#F59E0B]'
-                  : 'bg-[#E94B3C]'
-              )}
-              style={{ width: `${incident.slaPercentage}%` }}
-            />
-          </div>
-          <div className="text-xs text-[#353535] mt-1">SLA {incident.slaPercentage}%</div>
+        {/* SLA + estado cerrado visible */}
+        <div className="text-right flex flex-col items-end gap-1">
+          {isClosed ? (
+            <span className="text-xs font-bold text-gray-500 border border-gray-300 rounded-full px-2 py-0.5 bg-gray-100">
+              Cerrado
+            </span>
+          ) : (
+            <>
+              <div className="text-sm font-semibold text-[#353535]">{incident.slaRemaining}m</div>
+              <div className="h-1 w-16 rounded-full bg-[#D9D9D9] mt-1 overflow-hidden">
+                <div
+                  className={cn(
+                    'h-full transition-colors',
+                    incident.slaPercentage > 50 ? 'bg-[#3C6E71]' : incident.slaPercentage > 25 ? 'bg-[#F59E0B]' : 'bg-[#E94B3C]'
+                  )}
+                  style={{ width: `${incident.slaPercentage}%` }}
+                />
+              </div>
+              <div className="text-xs text-[#353535]">SLA {incident.slaPercentage}%</div>
+            </>
+          )}
         </div>
       </div>
     </div>

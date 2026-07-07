@@ -14,6 +14,7 @@ import { SlaModule } from './sla/sla.module';
 import { HttpClientModule } from './common/http-client/http-client.module';
 import { P6NotificacionesModule } from './p6-notificaciones/p6-notificaciones.module';
 import { EventsModule } from './events/events.module';
+import { SistemasModule } from './sistemas/sistemas.module';
 
 @Module({
   imports: [
@@ -97,6 +98,7 @@ import { EventsModule } from './events/events.module';
     IngestionModule,  // Capa de entrada: recibe alertas y las encola en Redis
     WorkerModule,     // Capa de procesamiento: desencola desde Redis y persiste en PostgreSQL
     IncidentesModule, // Capa de lectura: API para el frontend
+    SistemasModule,   // Catálogo de sistemas registrados
     SlaModule,        // Tarea programada: detecta y procesa vencimientos de SLA cada 5 min
     EventsModule,     // WebSockets Gateway
   ],
