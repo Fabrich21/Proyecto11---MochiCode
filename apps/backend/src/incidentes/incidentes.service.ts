@@ -100,7 +100,7 @@ export class IncidentesService {
       historial.incidenteId = incidente.id;
       historial.estadoAnterior = estadoAnterior;
       historial.estadoNuevo = updateDto.estado;
-      historial.cambiadoPorUsuarioId = updateDto.usuarioId;
+      historial.cambiadoPorUsuarioId = updateDto.usuarioId!;
 
       await queryRunner.manager.save(historial);
 
@@ -109,7 +109,7 @@ export class IncidentesService {
       this.eventsGateway.emitEstadoActualizado(incidente.id, updateDto.estado);
 
       if (updateDto.estado === IncidenteEstado.CERRADO) {
-        await this.notificarCierreAP9(incidenteActualizado, updateDto.usuarioId);
+        await this.notificarCierreAP9(incidenteActualizado, updateDto.usuarioId!);
       }
 
       return incidenteActualizado;
@@ -140,7 +140,7 @@ export class IncidentesService {
 
       const auditoria = new Auditoria();
       auditoria.incidenteId = incidente.id;
-      auditoria.accionPorUsuarioId = dto.usuarioId;
+      auditoria.accionPorUsuarioId = dto.usuarioId!;
       auditoria.descripcionAccion =
         `Ticket asignado al usuario ${dto.asignadoAUsuarioId}.`;
 

@@ -52,14 +52,15 @@ export async function PATCH(
         ESTADO_MAP[body.incidentStatus] ??
         (body.resolvedAt || body.closedAt ? 'CERRADO' : 'EN_PROGRESO');
  
+      const authHeader = request.headers.get('Authorization');
       const res = await fetch(url, {
         method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
+        headers: { 
+          'content-type': 'application/json',
+          ...(authHeader ? { 'Authorization': authHeader } : {})
+        },
         body: JSON.stringify({
           estado: estadoNuevo,
-          // TODO: reemplazar por el JWT.sub cuando P12 (Zero Trust) esté integrado
-          // Usando un UUIDv4 válido para que el ValidationPipe de NestJS no rechace la petición (Error 400)
-          usuarioId: '123e4567-e89b-12d3-a456-426614174000',
         }),
       });
  

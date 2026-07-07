@@ -14,11 +14,11 @@ import { SlaModule } from './sla/sla.module';
 import { HttpClientModule } from './common/http-client/http-client.module';
 import { P6NotificacionesModule } from './p6-notificaciones/p6-notificaciones.module';
 import { EventsModule } from './events/events.module';
+import { AuthModule } from './auth/auth.module';
 import { SistemasModule } from './sistemas/sistemas.module';
 
 @Module({
   imports: [
-// <-- MODIFICACIÓN APLICADA AQUÍ
     ConfigModule.forRoot({ 
       isGlobal: true,
       envFilePath: '../../.env', // Le indicamos que el .env está en la raíz del monorepo
@@ -101,6 +101,7 @@ import { SistemasModule } from './sistemas/sistemas.module';
     SistemasModule,   // Catálogo de sistemas registrados
     SlaModule,        // Tarea programada: detecta y procesa vencimientos de SLA cada 5 min
     EventsModule,     // WebSockets Gateway
+    AuthModule,       // Capa de Autenticación P12
   ],
   controllers: [AppController],
   providers: [

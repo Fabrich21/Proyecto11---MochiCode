@@ -24,7 +24,7 @@ function getApiKeyForSystem(systemId?: string) {
   return process.env[envKeyName] || '';
 }
 
-async function fetchAllBackendIncidents(baseUrl: string) {
+async function fetchAllBackendIncidents(baseUrl: string, authHeader: string | null) {
   const allItems: any[] = [];
   let page = 1;
   let totalPages = 1;
@@ -34,7 +34,12 @@ async function fetchAllBackendIncidents(baseUrl: string) {
     url.searchParams.set('page', String(page));
     url.searchParams.set('limit', '100');
 
-    const res = await fetch(url.toString(), { cache: 'no-store' });
+    const res = await fetch(url.toString(), { 
+      cache: 'no-store',
+      headers: {
+        ...(authHeader ? { 'Authorization': authHeader } : {})
+      }
+    });
 
     if (!res.ok) {
       throw new Error(`backend_error_${res.status}`);
@@ -103,11 +108,12 @@ function mapBackendToFrontend(inc: any) {
 }
 
 // ─── GET /api/incidents ──────────────────────────────────────────────────────
-export async function GET() {
+export async function GET(request: Request) {
   if (BACKEND_URL) {
     try {
-      const items = await fetchAllBackendIncidents(BACKEND_URL);
-
+      const authHeader = request.headers.get('Authorization');
+      const items = await fetchAllBackendIncidents(BACKEND_URL, authHeader);
+      
       return NextResponse.json(items.map(mapBackendToFrontend));
     } catch (err) {
       console.error('[GET /api/incidents] Error conectando al backend:', err);
@@ -124,33 +130,43 @@ export async function POST(request: Request) {
   if (BACKEND_URL) {
     try {
       const body = await request.json();
+      const authHeader = request.headers.get('Authorization');
       const sistemaId = normalizeSystemId(body.sistemaId || body.sistema_id || body.system);
       const apiKey = getApiKeyForSystem(sistemaId);
 
-      if (!apiKey) {
-        return NextResponse.json(
-          { error: 'missing_api_key', sistemaId },
-          { status: 400 },
-        );
-      }
+      let url, res;
 
-      const url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/alertas`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'x-api-key': apiKey,
-        },
-        body: JSON.stringify({
-          sistema_id: sistemaId,
-          creado_en: new Date().toISOString(),
-          payload: {
-            titulo: body.titulo,
-            descripcion: body.descripcion,
-            prioridad: body.prioridad,
+      if (apiKey) {
+        // Usa la lógica de la compañera (Ingestión vía máquina)
+        url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/alertas`;
+        res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-api-key': apiKey,
           },
-        }),
-      });
+          body: JSON.stringify({
+            sistema_id: sistemaId,
+            creado_en: new Date().toISOString(),
+            payload: {
+              titulo: body.titulo,
+              descripcion: body.descripcion,
+              prioridad: body.prioridad,
+            },
+          }),
+        });
+      } else {
+        // Fallback: Usa la lógica directa con JWT
+        url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/incidentes`;
+        res = await fetch(url, {
+          method: 'POST',
+          headers: { 
+            'content-type': 'application/json',
+            ...(authHeader ? { 'Authorization': authHeader } : {})
+          },
+          body: JSON.stringify(body),
+        });
+      }
 
       if (!res.ok) {
         const errorText = await res.text();
