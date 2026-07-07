@@ -10,6 +10,10 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { Auditoria } from '../database/entities/auditoria.entity';
+import { PoliticaSla } from '../database/entities/politica-sla.entity';
+import { SlaUtil } from '../common/utils/sla.util';
+import { CreateIncidenteDto } from './dto/create-incidente.dto';
+import { Sistema } from '../database/entities/sistema.entity';
 
 @Injectable()
 export class IncidentesService {
@@ -23,6 +27,10 @@ export class IncidentesService {
     private readonly historialEstadoRepository: Repository<HistorialEstado>,
     @InjectRepository(Auditoria)
     private readonly auditoriaRepository: Repository<Auditoria>,
+    @InjectRepository(PoliticaSla)
+    private readonly politicaSlaRepository: Repository<PoliticaSla>,
+    @InjectRepository(Sistema)
+    private readonly sistemaRepository: Repository<Sistema>,
     private readonly dataSource: DataSource,
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
@@ -61,6 +69,70 @@ export class IncidentesService {
         registros_por_pagina: limit,
       },
     };
+  }
+
+  async create(createDto: CreateIncidenteDto) {
+    const sistema = await this.sistemaRepository.findOne({
+      where: { sistemaId: createDto.sistemaId },
+    });
+
+    if (!sistema) {
+      throw new NotFoundException(`Sistema con ID ${createDto.sistemaId} no encontrado`);
+    }
+
+    const politicaSla = await this.politicaSlaRepository.findOne({
+      where: { nombre: createDto.prioridad },
+    });
+
+    if (!politicaSla) {
+      throw new NotFoundException(`Politica SLA para prioridad ${createDto.prioridad} no encontrada`);
+    }
+
+    const fechaCreacion = new Date();
+    const fechaLimiteResolucion = SlaUtil.calcularFechaLimiteResolucion(
+      fechaCreacion,
+      politicaSla.tiempoMaximoResolucionMinutos,
+    );
+
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const incidente = queryRunner.manager.create(Incidente, {
+        titulo: createDto.titulo,
+        descripcion: createDto.descripcion,
+        sistemaId: createDto.sistemaId,
+        creadorUsuarioId: createDto.creadorUsuarioId,
+        prioridad: createDto.prioridad,
+        estado: createDto.estado ?? IncidenteEstado.ABIERTO,
+        asignadoAUsuarioId: createDto.asignadoAUsuarioId,
+        politicaSlaId: politicaSla.id,
+        fechaLimiteResolucion,
+      });
+
+      const incidenteGuardado = await queryRunner.manager.save(Incidente, incidente);
+
+      await queryRunner.manager.save(HistorialEstado, {
+        incidenteId: incidenteGuardado.id,
+        estadoNuevo: incidenteGuardado.estado,
+        cambiadoPorUsuarioId: createDto.creadorUsuarioId,
+      });
+
+      await queryRunner.manager.save(Auditoria, {
+        incidenteId: incidenteGuardado.id,
+        accionPorUsuarioId: createDto.creadorUsuarioId,
+        descripcionAccion: `Incidente creado manualmente para sistema ${createDto.sistemaId}`,
+      });
+
+      await queryRunner.commitTransaction();
+      return incidenteGuardado;
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
   }
 
   async cambiarEstado(id: string, updateDto: UpdateEstadoIncidenteDto) {
