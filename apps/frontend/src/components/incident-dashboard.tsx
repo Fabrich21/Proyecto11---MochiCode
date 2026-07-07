@@ -7,6 +7,7 @@ import { Incident } from './incident-types';
 import IncidentDetailModal from './incident-detail-modal';
 import SlaViewer from './sla-viewer';
 import { useWebSockets } from '../hooks/useWebSockets';
+import { useAuth } from '../context/useAuth';
 
 import { IncidenteEstado } from './incident-types';
 
@@ -128,6 +129,7 @@ function mapBackendIncident(backendIncidente: any): Incident {
 ];
 */
 export function IncidentDashboard() {
+  const keycloak = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSeverity, setSelectedSeverity] = useState<string | null>(null);
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
@@ -173,7 +175,11 @@ export function IncidentDashboard() {
 
     async function load() {
       try {
-        const res = await fetch('/api/incidents');
+        const res = await fetch('/api/incidents', {
+          headers: {
+            'Authorization': `Bearer ${keycloak?.token || ''}`
+          }
+        });
         if (!res.ok) throw new Error('fetch_failed');
         const data = await res.json();
         if (!mounted) return;
@@ -205,7 +211,10 @@ export function IncidentDashboard() {
       try {
         await fetch(`/api/incidents/${encodeURIComponent(updated.id)}`, {
           method: 'PATCH',
-          headers: { 'content-type': 'application/json' },
+          headers: { 
+            'content-type': 'application/json',
+            'Authorization': `Bearer ${keycloak?.token || ''}`
+          },
           body: JSON.stringify(updated),
         });
       } catch (err) {

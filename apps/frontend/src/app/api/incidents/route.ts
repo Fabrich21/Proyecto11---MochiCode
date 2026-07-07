@@ -53,11 +53,17 @@ function mapBackendToFrontend(inc: any) {
 }
 
 // ─── GET /api/incidents ──────────────────────────────────────────────────────
-export async function GET() {
+export async function GET(request: Request) {
   if (BACKEND_URL) {
     try {
+      const authHeader = request.headers.get('Authorization');
       const url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/incidentes`;
-      const res = await fetch(url, { cache: 'no-store' });
+      const res = await fetch(url, { 
+        cache: 'no-store',
+        headers: {
+          ...(authHeader ? { 'Authorization': authHeader } : {})
+        }
+      });
 
       if (!res.ok) {
         return NextResponse.json(
@@ -85,11 +91,15 @@ export async function GET() {
 export async function POST(request: Request) {
   if (BACKEND_URL) {
     try {
+      const authHeader = request.headers.get('Authorization');
       const url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/incidentes`;
       const body = await request.text();
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 
+          'content-type': 'application/json',
+          ...(authHeader ? { 'Authorization': authHeader } : {})
+        },
         body,
       });
       const data = await res.json();

@@ -28,11 +28,11 @@ export class RolesGuard implements CanActivate {
       return false; // JWT guard debió haberlo atrapado, pero por si acaso.
     }
 
-    // Gate Global: Comentado porque el payload de P12 no trae realm_access actualmente.
-    // const accessRole = `${user.clientId}-access`;
-    // if (user.realmRoles && !user.realmRoles.includes(accessRole)) {
-    //   throw new ForbiddenException(`No tienes permiso global para acceder a esta aplicación (${accessRole} requerido)`);
-    // }
+    // Gate Global: Verifica que el usuario tenga permiso base para entrar a nuestra app
+    const accessRole = `${user.clientId}-access`;
+    if (user.realmRoles && !user.realmRoles.includes(accessRole)) {
+      throw new ForbiddenException(`No tienes permiso global para acceder a esta aplicación (${accessRole} requerido)`);
+    }
 
     // Si la ruta no exige un rol específico, lo dejamos pasar.
     if (!requiredRoles || requiredRoles.length === 0) {
