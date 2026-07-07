@@ -19,7 +19,7 @@ function cleanDescription(desc: string): string {
   if (!desc) return 'Sin descripción';
   try {
     //extraer solo el título
-    const jsonMatch = desc.match(/Payload original:\s*(\{.*\})/s);
+    const jsonMatch = desc.match(/Payload original:\s*(\{[\s\S]*\})/);
     if (jsonMatch) {
       try {
         const payload = JSON.parse(jsonMatch[1]);
