@@ -1,9 +1,13 @@
 'use client';
 
 import { IncidentDashboard } from '@/components/incident-dashboard';
-import { Bell } from 'lucide-react';
+import { Bell, LogOut } from 'lucide-react';
+import { useAuth } from '@/context/useAuth';
 
 export default function HomePage() {
+  const keycloak = useAuth();
+  const user = keycloak?.tokenParsed;
+  const roles = user?.realm_access?.roles ?? [];
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -17,7 +21,24 @@ export default function HomePage() {
               <button className="p-2 hover:bg-secondary/20 rounded-lg transition">
                 <Bell size={20} className="text-accent" />
               </button>
-              <div className="w-10 h-10 bg-primary rounded-full shadow-md"></div>
+              
+              {/* User Profile */}
+              <div className="flex items-center gap-3 ml-4 border-l border-border pl-4">
+                <div className="text-right hidden sm:block">
+                  <p className="text-sm font-medium text-foreground">{user?.preferred_username || 'Usuario'}</p>
+                  <p className="text-xs text-foreground/60">{roles.length > 0 ? roles.join(', ') : 'Operador'}</p>
+                </div>
+                <div className="w-10 h-10 bg-primary flex items-center justify-center rounded-full shadow-md text-white font-bold">
+                  {user?.preferred_username?.charAt(0).toUpperCase() || 'U'}
+                </div>
+                <button 
+                  onClick={() => keycloak?.logout()}
+                  className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition ml-2"
+                  title="Cerrar sesión"
+                >
+                  <LogOut size={20} />
+                </button>
+              </div>
             </div>
           </div>
         </div>

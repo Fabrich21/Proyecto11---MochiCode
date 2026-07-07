@@ -10,7 +10,11 @@
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
     "clsx": "^2.0.0",
+    "keycloak-js": "^26.2.4",
     "lightningcss": "^1.29.1",
     "lucide-react": "^0.399.0",
     "next": "16.2.4",
@@ -22,9 +26,6 @@
     "typescript": "^5"
   },
   "devDependencies": {
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.4"
   }

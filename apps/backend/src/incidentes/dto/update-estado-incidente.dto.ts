@@ -1,4 +1,4 @@
-import { IsEnum, IsNotEmpty, IsUUID } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsUUID, IsOptional } from 'class-validator';
 import { IncidenteEstado, IUpdateEstadoIncidenteDto } from '@proyecto/shared-types';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -20,6 +20,6 @@ export class UpdateEstadoIncidenteDto implements IUpdateEstadoIncidenteDto {
     example: 'f7b6d624-bcd8-4f44-b988-f1ce4f6fbb7d',
   })
   @IsUUID()
-  @IsNotEmpty()
-  usuarioId!: string;
+  @IsOptional()
+  usuarioId?: string;
 }

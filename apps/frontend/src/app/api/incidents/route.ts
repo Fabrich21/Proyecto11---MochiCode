@@ -3,10 +3,64 @@ import { listIncidents, createIncident } from '../_incidentsStore';
 
 const BACKEND_URL = process.env.BACKEND_URL || '';
 
+function normalizeSystemId(systemId?: string) {
+  const value = (systemId || '').trim().toUpperCase();
+  const match = value.match(/^P(\d+)$/);
+
+  if (!match) {
+    return value;
+  }
+
+  return `P${match[1].padStart(2, '0')}`;
+}
+
+function getApiKeyForSystem(systemId?: string) {
+  const normalizedSystemId = normalizeSystemId(systemId);
+  if (!normalizedSystemId) {
+    return '';
+  }
+
+  const envKeyName = `API_KEY_${normalizedSystemId}`;
+  return process.env[envKeyName] || '';
+}
+
+async function fetchAllBackendIncidents(baseUrl: string, authHeader: string | null) {
+  const allItems: any[] = [];
+  let page = 1;
+  let totalPages = 1;
+
+  do {
+    const url = new URL(`${baseUrl.replace(/\/$/, '')}/api/v1/incidentes`);
+    url.searchParams.set('page', String(page));
+    url.searchParams.set('limit', '100');
+
+    const res = await fetch(url.toString(), { 
+      cache: 'no-store',
+      headers: {
+        ...(authHeader ? { 'Authorization': authHeader } : {})
+      }
+    });
+
+    if (!res.ok) {
+      throw new Error(`backend_error_${res.status}`);
+    }
+
+    const json = await res.json();
+    const items: any[] = Array.isArray(json) ? json : (json.data ?? []);
+    allItems.push(...items);
+
+    const meta = Array.isArray(json) ? null : json.meta;
+    totalPages = meta?.total_paginas ?? page;
+    page += 1;
+  } while (page <= totalPages);
+
+  return allItems;
+}
+
 function mapBackendToFrontend(inc: any) {
-  const prioridad = (inc.prioridad ?? 'MEDIA').toUpperCase();
+  const prioridad = String(inc.prioridad ?? inc.priority ?? inc.severity ?? 'MEDIA').toUpperCase();
   const severity: 'critical' | 'high' | 'medium' =
-    prioridad === 'CRITICA' || prioridad === 'CRITICAL'
+    prioridad === 'CRITICA' || prioridad === 'CRITICAL' || prioridad === 'URGENTE'
       ? 'critical'
       : prioridad === 'ALTA' || prioridad === 'HIGH'
       ? 'high'
@@ -35,6 +89,7 @@ function mapBackendToFrontend(inc: any) {
     title: inc.titulo || `Incidente ${inc.id}`,
     system: inc.sistemaId || inc.sistema_id || inc.system || 'Desconocido',
     description: inc.descripcion || inc.titulo || 'Sin descripción',
+    resolutionSummary: inc.resolutionSummary || inc.resolucion || inc.solucion || inc.solution || null,
     severity,
     incidentStatus: inc.estado ?? 'ABIERTO',
     createdAt: inc.creadoEn ?? inc.createdAt ?? new Date().toISOString(),
@@ -53,23 +108,12 @@ function mapBackendToFrontend(inc: any) {
 }
 
 // ─── GET /api/incidents ──────────────────────────────────────────────────────
-export async function GET() {
+export async function GET(request: Request) {
   if (BACKEND_URL) {
     try {
-      const url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/incidentes`;
-      const res = await fetch(url, { cache: 'no-store' });
-
-      if (!res.ok) {
-        return NextResponse.json(
-          { error: 'backend_error', status: res.status },
-          { status: res.status },
-        );
-      }
-
-      const json = await res.json();
-      // El backend envuelve la respuesta: { data: [...], meta: {...} }
-      const items: any[] = Array.isArray(json) ? json : (json.data ?? []);
-
+      const authHeader = request.headers.get('Authorization');
+      const items = await fetchAllBackendIncidents(BACKEND_URL, authHeader);
+      
       return NextResponse.json(items.map(mapBackendToFrontend));
     } catch (err) {
       console.error('[GET /api/incidents] Error conectando al backend:', err);
@@ -85,15 +129,54 @@ export async function GET() {
 export async function POST(request: Request) {
   if (BACKEND_URL) {
     try {
-      const url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/incidentes`;
-      const body = await request.text();
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body,
-      });
-      const data = await res.json();
-      return NextResponse.json(mapBackendToFrontend(data), { status: res.status });
+      const body = await request.json();
+      const authHeader = request.headers.get('Authorization');
+      const sistemaId = normalizeSystemId(body.sistemaId || body.sistema_id || body.system);
+      const apiKey = getApiKeyForSystem(sistemaId);
+
+      let url, res;
+
+      if (apiKey) {
+        // Usa la lógica de la compañera (Ingestión vía máquina)
+        url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/alertas`;
+        res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'x-api-key': apiKey,
+          },
+          body: JSON.stringify({
+            sistema_id: sistemaId,
+            creado_en: new Date().toISOString(),
+            payload: {
+              titulo: body.titulo,
+              descripcion: body.descripcion,
+              prioridad: body.prioridad,
+            },
+          }),
+        });
+      } else {
+        // Fallback: Usa la lógica directa con JWT
+        url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/incidentes`;
+        res = await fetch(url, {
+          method: 'POST',
+          headers: { 
+            'content-type': 'application/json',
+            ...(authHeader ? { 'Authorization': authHeader } : {})
+          },
+          body: JSON.stringify(body),
+        });
+      }
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        return NextResponse.json(
+          { error: 'backend_error', status: res.status, detail: errorText },
+          { status: res.status },
+        );
+      }
+
+      return NextResponse.json({ accepted: true }, { status: res.status });
     } catch (err) {
       console.error('[POST /api/incidents] Error:', err);
       return NextResponse.json({ error: 'connection_failed' }, { status: 502 });
@@ -102,7 +185,19 @@ export async function POST(request: Request) {
 
   try {
     const body = await request.json();
-    const created = createIncident(body);
+    const created = createIncident({
+      ...body,
+      system: body.sistemaId || body.sistema_id || body.system,
+      severity:
+        String(body.prioridad || body.severity || '').toUpperCase() === 'CRITICA' || String(body.prioridad || body.severity || '').toUpperCase() === 'CRITICAL' || String(body.prioridad || body.severity || '').toUpperCase() === 'URGENTE'
+          ? 'critical'
+          : String(body.prioridad || body.severity || '').toUpperCase() === 'ALTA' || String(body.prioridad || body.severity || '').toUpperCase() === 'HIGH'
+            ? 'high'
+            : 'medium',
+      description: body.descripcion || body.description || '',
+      resolutionSummary: body.resolutionSummary || body.resolucion || body.solucion || body.solution || null,
+      affectedProject: body.sistemaId || body.sistema_id || body.affectedProject,
+    });
     return NextResponse.json(created, { status: 201 });
   } catch {
     return NextResponse.json({ error: 'invalid_payload' }, { status: 400 });

@@ -23,7 +23,13 @@ export interface IIncidente {
 
 export interface IUpdateEstadoIncidenteDto {
   estado: IncidenteEstado;
-  usuarioId: string;
+  usuarioId?: string;
+}
+
+export interface IAsignarIncidenteDto {
+  asignadoAUsuarioId: string;
+  usuarioId?: string;
+  email?: string;
 }
 
 export interface IGetIncidentesDto {

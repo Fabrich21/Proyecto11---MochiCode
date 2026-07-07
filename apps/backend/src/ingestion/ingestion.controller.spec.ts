@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import * as request from 'supertest';
 import { IngestionController } from './ingestion.controller';
 import { IngestionService } from './ingestion.service';
-import { ZeroTrustGuard } from '../common/guards/zero-trust/zero-trust.guard';
+import { HybridAuthGuard } from '../auth/guards/hybrid-auth.guard';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Suite 1: Guard mockeado — verifica la capa HTTP del controlador de forma aislada
@@ -21,7 +21,7 @@ describe('IngestionController — HTTP (guard mockeado)', () => {
         { provide: IngestionService, useValue: mockIngestionService },
       ],
     })
-      .overrideGuard(ZeroTrustGuard)
+      .overrideGuard(HybridAuthGuard)
       .useValue({ canActivate: () => true })
       .compile();
 
@@ -141,8 +141,8 @@ describe('IngestionController — ZeroTrustGuard integrado', () => {
           provide: ConfigService,
           useValue: {
             get: (key: string) => {
-              if (key === 'API_KEY_P1') return 'auth_p1_secret';
-              if (key === 'API_KEY_P8') return 'auth_p8_secret';
+              if (key === 'API_KEY_P01') return 'auth_p1_secret';
+              if (key === 'API_KEY_P08') return 'auth_p8_secret';
               return null;
             },
           },

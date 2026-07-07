@@ -52,13 +52,15 @@ export async function PATCH(
         ESTADO_MAP[body.incidentStatus] ??
         (body.resolvedAt || body.closedAt ? 'CERRADO' : 'EN_PROGRESO');
  
+      const authHeader = request.headers.get('Authorization');
       const res = await fetch(url, {
         method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
+        headers: { 
+          'content-type': 'application/json',
+          ...(authHeader ? { 'Authorization': authHeader } : {})
+        },
         body: JSON.stringify({
           estado: estadoNuevo,
-          // TODO: reemplazar por el JWT.sub cuando P12 (Zero Trust) esté integrado
-          usuarioId: '00000000-0000-0000-0000-000000000001',
         }),
       });
  

@@ -31,7 +31,7 @@ package.json
 npm install
 ```
 
-3. Levanta servicios de infraestructura (Base de datos y Redis):
+3. Levanta los servicios de infraestructura (Base de datos y Redis):
 
 ```bash
 docker compose up -d

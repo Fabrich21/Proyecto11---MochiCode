@@ -12,11 +12,13 @@ import { WorkerModule } from './worker/worker.module';
 import { IncidentesModule } from './incidentes/incidentes.module';
 import { SlaModule } from './sla/sla.module';
 import { HttpClientModule } from './common/http-client/http-client.module';
+import { P6NotificacionesModule } from './p6-notificaciones/p6-notificaciones.module';
 import { EventsModule } from './events/events.module';
+import { AuthModule } from './auth/auth.module';
+import { SistemasModule } from './sistemas/sistemas.module';
 
 @Module({
   imports: [
-// <-- MODIFICACIÓN APLICADA AQUÍ
     ConfigModule.forRoot({ 
       isGlobal: true,
       envFilePath: '../../.env', // Le indicamos que el .env está en la raíz del monorepo
@@ -85,6 +87,7 @@ import { EventsModule } from './events/events.module';
 
     // --- MÓDULOS DEL DOMINIO ---
     HttpClientModule, // Cliente HTTP resiliente para integraciones externas (P6, P9, P12)
+    P6NotificacionesModule, // Conectores Email y Móvil hacia Proyecto 6
     // Escudo antispam: Rate Limiting Global
     ThrottlerModule.forRoot([{
       ttl: 60000, // Una ventana de 60 segundos (1 minuto)
@@ -95,8 +98,10 @@ import { EventsModule } from './events/events.module';
     IngestionModule,  // Capa de entrada: recibe alertas y las encola en Redis
     WorkerModule,     // Capa de procesamiento: desencola desde Redis y persiste en PostgreSQL
     IncidentesModule, // Capa de lectura: API para el frontend
+    SistemasModule,   // Catálogo de sistemas registrados
     SlaModule,        // Tarea programada: detecta y procesa vencimientos de SLA cada 5 min
     EventsModule,     // WebSockets Gateway
+    AuthModule,       // Capa de Autenticación P12
   ],
   controllers: [AppController],
   providers: [

@@ -1,8 +1,9 @@
-import { Controller, Get, Patch, Param, Body, Query, Post } from '@nestjs/common';
+import { Controller, Get, Patch, Param, Body, Query, Post, UseGuards, Request } from '@nestjs/common';
 import { IncidentesService } from './incidentes.service';
 import { GetIncidentesDto } from './dto/get-incidentes.dto';
 import { UpdateEstadoIncidenteDto } from './dto/update-estado-incidente.dto';
 import { CreateIncidenteDto } from './dto/create-incidente.dto';
+import { AsignarIncidenteDto } from './dto/asignar-incidente.dto';
 import {
   ApiBody,
   ApiCreatedResponse,
@@ -12,9 +13,12 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
 
 @ApiTags('Incidentes')
 @Controller('incidentes')
+@UseGuards(JwtAuthGuard, RolesGuard)
 export class IncidentesController {
   constructor(private readonly incidentesService: IncidentesService) {}
 
@@ -95,7 +99,19 @@ export class IncidentesController {
   cambiarEstado(
     @Param('id') id: string,
     @Body() updateEstadoIncidenteDto: UpdateEstadoIncidenteDto,
+    @Request() req: any,
   ) {
+    updateEstadoIncidenteDto.usuarioId = req.user.userId;
     return this.incidentesService.cambiarEstado(id, updateEstadoIncidenteDto);
+  }
+
+  @Patch(':id/asignar')
+  asignarIncidente(
+    @Param('id') id: string,
+    @Body() asignarIncidenteDto: AsignarIncidenteDto,
+    @Request() req: any,
+  ) {
+    asignarIncidenteDto.usuarioId = req.user.userId;
+    return this.incidentesService.asignarIncidente(id, asignarIncidenteDto);
   }
 }
