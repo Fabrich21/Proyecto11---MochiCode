@@ -58,9 +58,9 @@ async function fetchAllBackendIncidents(baseUrl: string, authHeader: string | nu
 }
 
 function mapBackendToFrontend(inc: any) {
-  const prioridad = (inc.prioridad ?? 'MEDIA').toUpperCase();
+  const prioridad = String(inc.prioridad ?? inc.priority ?? inc.severity ?? 'MEDIA').toUpperCase();
   const severity: 'critical' | 'high' | 'medium' =
-    prioridad === 'CRITICA' || prioridad === 'CRITICAL'
+    prioridad === 'CRITICA' || prioridad === 'CRITICAL' || prioridad === 'URGENTE'
       ? 'critical'
       : prioridad === 'ALTA' || prioridad === 'HIGH'
       ? 'high'
@@ -89,6 +89,7 @@ function mapBackendToFrontend(inc: any) {
     title: inc.titulo || `Incidente ${inc.id}`,
     system: inc.sistemaId || inc.sistema_id || inc.system || 'Desconocido',
     description: inc.descripcion || inc.titulo || 'Sin descripción',
+    resolutionSummary: inc.resolutionSummary || inc.resolucion || inc.solucion || inc.solution || null,
     severity,
     incidentStatus: inc.estado ?? 'ABIERTO',
     createdAt: inc.creadoEn ?? inc.createdAt ?? new Date().toISOString(),
@@ -188,12 +189,13 @@ export async function POST(request: Request) {
       ...body,
       system: body.sistemaId || body.sistema_id || body.system,
       severity:
-        (body.prioridad || body.severity) === 'CRITICA' || (body.prioridad || body.severity) === 'CRITICAL'
+        String(body.prioridad || body.severity || '').toUpperCase() === 'CRITICA' || String(body.prioridad || body.severity || '').toUpperCase() === 'CRITICAL' || String(body.prioridad || body.severity || '').toUpperCase() === 'URGENTE'
           ? 'critical'
-          : (body.prioridad || body.severity) === 'ALTA' || (body.prioridad || body.severity) === 'HIGH'
+          : String(body.prioridad || body.severity || '').toUpperCase() === 'ALTA' || String(body.prioridad || body.severity || '').toUpperCase() === 'HIGH'
             ? 'high'
             : 'medium',
       description: body.descripcion || body.description || '',
+      resolutionSummary: body.resolutionSummary || body.resolucion || body.solucion || body.solution || null,
       affectedProject: body.sistemaId || body.sistema_id || body.affectedProject,
     });
     return NextResponse.json(created, { status: 201 });
