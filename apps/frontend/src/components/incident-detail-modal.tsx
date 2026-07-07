@@ -123,6 +123,20 @@ export function IncidentDetailModal({ incident, onClose, onAcknowledge, onResolv
             </p>
           </div>
 
+          {isClosed && (
+            <div>
+              <p className="text-sm font-semibold text-foreground/70">Solución / cierre</p>
+              <div className="mt-2 rounded-lg border border-border bg-green-50/70 p-4 text-sm leading-relaxed text-foreground">
+                <p className="font-medium text-green-900">
+                  Caso cerrado correctamente.
+                </p>
+                <p className="mt-2 text-green-900/80">
+                  {incident.resolutionSummary || cleanDesc || 'No se registró una solución detallada en el incidente.'}
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Card title="SLA restante" value={`${incident.slaRemaining}m`} />
             <Card title="SLA consumido" value={`${incident.slaPercentage}%`} />

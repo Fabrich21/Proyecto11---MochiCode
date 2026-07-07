@@ -14,6 +14,7 @@ export interface Incident {
   severity: IncidentSeverity;
   system: string;
   description: string;
+  resolutionSummary?: string | null;
   slaRemaining: number;
   slaPercentage: number;
   createdAt: Date | string;

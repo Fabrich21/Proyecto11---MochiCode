@@ -10,13 +10,54 @@ import { NewIncidentModal } from './new-incident-modal';
 import { useWebSockets } from '../hooks/useWebSockets';
 import { IncidenteEstado } from './incident-types';
 
-function mapBackendIncident(backendIncidente: any): Incident {
+type BackendIncident = {
+  id: string;
+  titulo?: string;
+  prioridad?: string;
+  priority?: string;
+  severity?: string;
+  sistemaId?: string;
+  sistema_id?: string;
+  descripcion?: string;
+  creadoEn?: string | Date;
+  estado?: string;
+  fechaResolucion?: string | Date | null;
+  fechaLimiteResolucion?: string | Date | null;
+  fecha_limite_resolucion?: string | Date | null;
+  politicaSla?: {
+    tiempoMaximoResolucionMinutos?: number;
+  } | null;
+  affectedUsers?: number | null;
+  acknowledgedAt?: string | Date | null;
+  resolutionSummary?: string | null;
+  resolucion?: string | null;
+  solucion?: string | null;
+  solution?: string | null;
+};
+
+function mapSeverity(value?: string): Incident['severity'] {
+  const normalized = String(value ?? 'MEDIA').toUpperCase();
+
+  if (normalized === 'CRITICA' || normalized === 'CRITICAL' || normalized === 'URGENTE') {
+    return 'critical';
+  }
+
+  if (normalized === 'ALTA' || normalized === 'HIGH') {
+    return 'high';
+  }
+
+  return 'medium';
+}
+
+function mapBackendIncident(backendIncidente: BackendIncident): Incident {
   const prioridadMap: Record<string, string> = {
     CRITICA: 'critical',
     ALTA: 'high',
     MEDIA: 'medium',
     BAJA: 'medium',
   };
+
+  const prioridadNormalizada = String(backendIncidente.prioridad ?? backendIncidente.priority ?? backendIncidente.severity ?? 'MEDIA').toUpperCase();
 
   let slaRemaining = 0;
   let slaPercentage = 0;
@@ -38,16 +79,17 @@ function mapBackendIncident(backendIncidente: any): Incident {
   return {
     id: backendIncidente.id,
     title: backendIncidente.titulo || `Incidente ${backendIncidente.id}`,
-    severity: (prioridadMap[backendIncidente.prioridad] || 'medium') as any,
+    severity: mapSeverity(prioridadMap[prioridadNormalizada] || prioridadNormalizada),
     system: backendIncidente.sistemaId || backendIncidente.sistema_id || 'Desconocido',
     description: backendIncidente.descripcion || backendIncidente.titulo || 'Sin descripción',
+    resolutionSummary: backendIncidente.resolutionSummary || backendIncidente.resolucion || backendIncidente.solucion || backendIncidente.solution || null,
     slaRemaining,
     slaPercentage,
     createdAt: backendIncidente.creadoEn || new Date(),
     incidentStatus: backendIncidente.estado || IncidenteEstado.ABIERTO,
     slaTargetMinutes,
-    affectedProject: backendIncidente.sistemaId ?? null,
-    affectedUsers: backendIncidente.affectedUsers ?? null,
+    affectedProject: backendIncidente.sistemaId ?? undefined,
+    affectedUsers: backendIncidente.affectedUsers ?? undefined,
     acknowledgedAt: backendIncidente.acknowledgedAt ?? null,
     resolvedAt: backendIncidente.fechaResolucion ?? null,
     closedAt: backendIncidente.estado === 'CERRADO' ? (backendIncidente.fechaResolucion ?? new Date().toISOString()) : null,
@@ -61,6 +103,8 @@ export function IncidentDashboard() {
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
   const [showNewModal, setShowNewModal] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 10;
 
   const { isConnected } = useWebSockets({
     room: 'dashboard_incidentes',
@@ -73,7 +117,7 @@ export function IncidentDashboard() {
         prev.map((i) => (i.id === incidenteId ? { ...i, incidentStatus: nuevoEstado } : i))
       );
     },
-    onIncidenteActualizado: ({ incidenteId }: { incidenteId: string; nuevo_evento: any }) => {
+    onIncidenteActualizado: ({ incidenteId }: { incidenteId: string; nuevo_evento?: unknown }) => {
       console.log('Incidente actualizado vía WS:', incidenteId);
     },
   });
@@ -106,7 +150,9 @@ export function IncidentDashboard() {
   }
 
   useEffect(() => {
-    loadIncidents();
+    // Carga inicial de incidentes al montar el dashboard.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadIncidents();
   }, []);
 
   function updateIncident(updated: Incident) {
@@ -171,6 +217,40 @@ export function IncidentDashboard() {
     });
   }, [filteredIncidents]);
 
+  const totalPages = Math.max(1, Math.ceil(sortedIncidents.length / pageSize));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const paginatedIncidents = useMemo(() => {
+    const start = (safeCurrentPage - 1) * pageSize;
+    return sortedIncidents.slice(start, start + pageSize);
+  }, [sortedIncidents, safeCurrentPage]);
+
+  const visiblePages = useMemo(() => {
+    const pages: Array<number | 'ellipsis'> = [];
+    const windowSize = 2;
+    const start = Math.max(1, safeCurrentPage - windowSize);
+    const end = Math.min(totalPages, safeCurrentPage + windowSize);
+
+    if (start > 1) {
+      pages.push(1);
+      if (start > 2) {
+        pages.push('ellipsis');
+      }
+    }
+
+    for (let page = start; page <= end; page += 1) {
+      pages.push(page);
+    }
+
+    if (end < totalPages) {
+      if (end < totalPages - 1) {
+        pages.push('ellipsis');
+      }
+      pages.push(totalPages);
+    }
+
+    return pages;
+  }, [safeCurrentPage, totalPages]);
+
   return (
     <div className="space-y-6">
       {/* Controls */}
@@ -181,7 +261,10 @@ export function IncidentDashboard() {
             type="text"
             placeholder="Buscar incidentes..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentPage(1);
+            }}
             className="flex-1 bg-transparent text-foreground placeholder-foreground/40 outline-none"
           />
         </div>
@@ -189,7 +272,10 @@ export function IncidentDashboard() {
         <div className="flex gap-2">
           <select
             value={selectedSeverity || ''}
-            onChange={(e) => setSelectedSeverity(e.target.value || null)}
+            onChange={(e) => {
+              setSelectedSeverity(e.target.value || null);
+              setCurrentPage(1);
+            }}
             className="rounded-lg border border-border bg-white px-4 py-2 font-medium text-foreground transition-colors hover:bg-secondary/20 cursor-pointer"
           >
             <option value="">Todos</option>
@@ -256,8 +342,8 @@ export function IncidentDashboard() {
             <div className="rounded-lg border border-border bg-white p-8 text-center shadow-sm">
               <p className="text-foreground/60">Cargando incidentes...</p>
             </div>
-          ) : sortedIncidents.length > 0 ? (
-            sortedIncidents.map((incident) => (
+          ) : paginatedIncidents.length > 0 ? (
+            paginatedIncidents.map((incident) => (
               <IncidentCard key={incident.id} incident={incident} onClick={() => setSelectedIncident(incident)} />
             ))
           ) : (
@@ -274,6 +360,53 @@ export function IncidentDashboard() {
             </div>
           )}
         </div>
+
+        {totalPages > 1 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-white px-4 py-3 shadow-sm">
+            <p className="text-sm text-foreground/60">
+              Página {safeCurrentPage} de {totalPages}
+            </p>
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                disabled={safeCurrentPage === 1}
+                className="rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground/70 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                &lt;
+              </button>
+
+              {visiblePages.map((page, index) =>
+                page === 'ellipsis' ? (
+                  <span key={`ellipsis-${index}`} className="px-2 text-foreground/40">...</span>
+                ) : (
+                  <button
+                    key={page}
+                    type="button"
+                    onClick={() => setCurrentPage(page)}
+                    className={`min-w-9 rounded-md border px-3 py-1.5 text-sm font-medium ${
+                      page === safeCurrentPage
+                        ? 'border-[#3C6E71] bg-[#3C6E71] text-white'
+                        : 'border-border text-foreground/70 hover:bg-secondary/20'
+                    }`}
+                  >
+                    {page}
+                  </button>
+                )
+              )}
+
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                disabled={safeCurrentPage === totalPages}
+                className="rounded-md border border-border px-3 py-1.5 text-sm font-medium text-foreground/70 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                &gt;
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Modal detalle */}
