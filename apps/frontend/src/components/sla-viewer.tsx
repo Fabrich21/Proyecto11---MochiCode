@@ -11,6 +11,14 @@ type ApiSystemOption = {
   name?: string;
 };
 
+type SystemsResponse = {
+  data?: ApiSystemOption[];
+};
+
+function isSystemsResponse(value: unknown): value is SystemsResponse {
+  return typeof value === 'object' && value !== null && 'data' in value;
+}
+
 export default function SlaViewer({ incidents }: { incidents: Incident[] }) {
   const [sistemasMap, setSistemasMap] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
@@ -21,11 +29,15 @@ export default function SlaViewer({ incidents }: { incidents: Incident[] }) {
         const res = await fetch('/api/systems');
         if (res.ok) {
           const data: unknown = await res.json();
-          const items = Array.isArray(data) ? data : (data.data ?? []);
+          const items = Array.isArray(data)
+            ? data
+            : isSystemsResponse(data)
+              ? data.data ?? []
+              : [];
           const map: Record<string, string> = {};
           items.forEach((s: ApiSystemOption) => {
             const id = s.id ?? s.sistemaId ?? s.sistema_id;
-            const nombre = s.nombre ?? s.name ?? id;
+            const nombre = s.nombre ?? s.name ?? id ?? 'Sistema desconocido';
             if (id) map[id] = nombre;
           });
           setSistemasMap(map);
