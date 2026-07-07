@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "node ./scripts/ensure-native-bindings.cjs && next build",
     "start": "next start -H 0.0.0.0",
     "lint": "eslint"
   },
@@ -30,6 +30,7 @@
     "eslint-config-next": "16.2.4"
   },
   "optionalDependencies": {
+    "@tailwindcss/oxide-linux-x64-gnu": "4.3.0",
     "lightningcss-linux-x64-gnu": "^1.32.0"
   }
 }
