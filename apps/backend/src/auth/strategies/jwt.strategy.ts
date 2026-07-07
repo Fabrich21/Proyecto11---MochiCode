@@ -11,7 +11,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(private configService: ConfigService) {
     const jwksUri = configService.get<string>('P12_JWKS_URI');
     const issuer = configService.get<string>('P12_ISSUER');
-    const clientId = configService.get<string>('P12_CLIENT_ID', 'app-11');
+    const clientId = configService.get<string>('P12_CLIENT_ID', 'p11');
 
     if (!jwksUri || !issuer) {
       throw new Error('Faltan variables de entorno P12_JWKS_URI o P12_ISSUER para configurar JwtStrategy');
