@@ -3,7 +3,7 @@
 import { AlertTriangle, TrendingUp } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useEffect, useState } from 'react';
-import { Incident, IncidenteEstado } from './incident-types';
+import { Incident, IncidenteEstado, getIncidentStatusBadgeClassName, getIncidentStatusLabel, normalizeIncidentStatus } from './incident-types';
 
 export interface IncidentCardProps {
   incident: Incident;
@@ -28,24 +28,14 @@ function getSeverityLabel(severity: string) {
   }
 }
 
-function getStatusBadge(status?: string) {
-  switch (status) {
-    case IncidenteEstado.CERRADO:
-      return { label: 'Cerrado', className: 'bg-gray-100 text-gray-600 border-gray-300' };
-    case IncidenteEstado.EN_PROGRESO:
-      return { label: 'En Progreso', className: 'bg-blue-100 text-blue-700 border-blue-300' };
-    case 'VENCIDO':
-      return { label: 'Vencido', className: 'bg-red-100 text-red-700 border-red-300' };
-    case IncidenteEstado.ABIERTO:
-    default:
-      return { label: 'Abierto', className: 'bg-yellow-100 text-yellow-700 border-yellow-300' };
-  }
-}
-
 export function IncidentCard({ incident, onClick }: IncidentCardProps) {
   const [timeAgoText, setTimeAgoText] = useState<string>('');
-  const statusBadge = getStatusBadge(incident.incidentStatus as string);
-  const isClosed = incident.incidentStatus === IncidenteEstado.CERRADO;
+  const normalizedStatus = normalizeIncidentStatus(incident.incidentStatus);
+  const statusBadge = {
+    label: getIncidentStatusLabel(normalizedStatus),
+    className: getIncidentStatusBadgeClassName(normalizedStatus),
+  };
+  const isClosed = normalizedStatus === IncidenteEstado.CERRADO;
 
   useEffect(() => {
     const timeAgo = Math.floor((Date.now() - new Date(incident.createdAt).getTime()) / 60000);
