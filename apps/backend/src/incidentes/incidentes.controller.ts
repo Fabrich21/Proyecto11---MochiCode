@@ -1,9 +1,11 @@
-import { Controller, Get, Patch, Param, Body, Query, Post, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Patch, Param, Body, Query, Post, UseGuards, Request, Delete } from '@nestjs/common';
 import { IncidentesService } from './incidentes.service';
 import { GetIncidentesDto } from './dto/get-incidentes.dto';
 import { UpdateEstadoIncidenteDto } from './dto/update-estado-incidente.dto';
 import { CreateIncidenteDto } from './dto/create-incidente.dto';
 import { AsignarIncidenteDto } from './dto/asignar-incidente.dto';
+import { CreateComentarioDto } from './dto/create-comentario.dto';
+import { ComentarioResponseDto } from './dto/comentario-response.dto';
 import {
   ApiBody,
   ApiCreatedResponse,
@@ -113,5 +115,56 @@ export class IncidentesController {
   ) {
     asignarIncidenteDto.usuarioId = req.user.userId;
     return this.incidentesService.asignarIncidente(id, asignarIncidenteDto);
+  }
+
+  @Post(':id/comentarios')
+  @ApiOperation({ summary: 'Agregar comentario a un incidente' })
+  @ApiParam({ name: 'id', description: 'UUID del incidente' })
+  @ApiBody({ type: CreateComentarioDto })
+  @ApiCreatedResponse({
+    description: 'Comentario creado exitosamente',
+    type: ComentarioResponseDto,
+  })
+  @ApiNotFoundResponse({ description: 'Incidente no encontrado' })
+  crearComentario(
+    @Param('id') incidenteId: string,
+    @Body() createComentarioDto: CreateComentarioDto,
+    @Request() req: any,
+  ) {
+    return this.incidentesService.crearComentario(
+      incidenteId,
+      createComentarioDto,
+      req.user.userId,
+    );
+  }
+
+  @Get(':id/comentarios')
+  @ApiOperation({ summary: 'Obtener comentarios de un incidente' })
+  @ApiParam({ name: 'id', description: 'UUID del incidente' })
+  @ApiOkResponse({
+    description: 'Lista de comentarios',
+    type: [ComentarioResponseDto],
+  })
+  @ApiNotFoundResponse({ description: 'Incidente no encontrado' })
+  obtenerComentarios(@Param('id') incidenteId: string) {
+    return this.incidentesService.obtenerComentarios(incidenteId);
+  }
+
+  @Delete(':id/comentarios/:comentarioId')
+  @ApiOperation({ summary: 'Eliminar comentario de un incidente' })
+  @ApiParam({ name: 'id', description: 'UUID del incidente' })
+  @ApiParam({ name: 'comentarioId', description: 'UUID del comentario' })
+  @ApiOkResponse({ description: 'Comentario eliminado' })
+  @ApiNotFoundResponse({ description: 'Comentario no encontrado' })
+  eliminarComentario(
+    @Param('id') incidenteId: string,
+    @Param('comentarioId') comentarioId: string,
+    @Request() req: any,
+  ) {
+    return this.incidentesService.eliminarComentario(
+      incidenteId,
+      comentarioId,
+      req.user.userId,
+    );
   }
 }

@@ -65,4 +65,20 @@ export class EventsGateway implements OnGatewayConnection, OnGatewayDisconnect {
       nuevoEstado,
     });
   }
+
+  emitNuevoComentario(incidenteId: string, comentario: any) {
+    this.logger.debug(`Emitiendo nuevo_comentario para incidente ${incidenteId}`);
+    this.server.to(`incidente_${incidenteId}`).emit('nuevo_comentario', {
+      incidenteId,
+      comentario,
+    });
+  }
+
+  emitComentarioEliminado(incidenteId: string, comentarioId: string) {
+    this.logger.debug(`Emitiendo comentario_eliminado para incidente ${incidenteId}`);
+    this.server.to(`incidente_${incidenteId}`).emit('comentario_eliminado', {
+      incidenteId,
+      comentarioId,
+    });
+  }
 }
