@@ -84,7 +84,7 @@ describe('IncidentesService', () => {
   const mockConfigService = {
     get: jest.fn().mockImplementation((key: string, defaultValue?: string) => {
       if (key === 'P9_ANALITICA_URL') {
-        return 'http://p9-analitica/api/v1/ingesta/eventos-operacionales';
+        return 'http://p9-analitica/v1/events';
       }
       return defaultValue;
     }),
@@ -255,6 +255,8 @@ describe('IncidentesService', () => {
         .mockResolvedValueOnce({})
         .mockResolvedValueOnce({});
 
+      mockHttpService.post.mockReturnValue(of({ data: { ok: true } }));
+
       const result = await service.create(createDto);
 
       expect(mockSistemaRepository.findOne).toHaveBeenCalledWith({ where: { sistemaId: 'P04' } });
@@ -270,6 +272,21 @@ describe('IncidentesService', () => {
       );
       expect(mockQueryRunner.manager.save).toHaveBeenCalledTimes(3);
       expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
+      
+      expect(mockHttpService.post).toHaveBeenCalledWith(
+        'http://p9-analitica/v1/events',
+        expect.objectContaining({
+          source: 'incidents',
+          event_type: 'incident_created',
+          payload: expect.objectContaining({
+            incident_id: 'inc-1',
+            title: createDto.titulo,
+            severity: 'high',
+            status: 'open'
+          })
+        }),
+      );
+
       expect(result).toEqual(incidenteCreado);
     });
 
@@ -339,18 +356,22 @@ describe('IncidentesService', () => {
       expect(result.estado).toBe(IncidenteEstado.CERRADO);
       expect(mockEventsGateway.emitEstadoActualizado).toHaveBeenCalledWith('1', IncidenteEstado.CERRADO);
       expect(mockHttpService.post).toHaveBeenCalledWith(
-        'http://p9-analitica/api/v1/ingesta/eventos-operacionales',
+        'http://p9-analitica/v1/events',
         expect.objectContaining({
-          evento: 'Cierre',
-          incidente_id: '1',
-          mttr_minutos: expect.any(Number),
+          source: 'incidents',
+          event_type: 'incident_resolved',
+          payload: expect.objectContaining({
+            incident_id: '1',
+            resolution_time_hours: expect.any(Number),
+            sla_met: true,
+          })
         }),
       );
       expect(mockAuditoriaRepository.save).toHaveBeenCalledWith(
         expect.objectContaining({
           incidenteId: '1',
           accionPorUsuarioId: 'user1',
-          descripcionAccion: expect.stringContaining('Evento enviado a P09: Cierre'),
+          descripcionAccion: expect.stringContaining('Evento enviado a P09: incident_resolved'),
         }),
       );
     });
@@ -379,11 +400,15 @@ describe('IncidentesService', () => {
       await service.cambiarEstado('mttr-1', { estado: IncidenteEstado.CERRADO, usuarioId: 'user1' });
 
       expect(mockHttpService.post).toHaveBeenCalledWith(
-        'http://p9-analitica/api/v1/ingesta/eventos-operacionales',
+        'http://p9-analitica/v1/events',
         expect.objectContaining({
-          incidente_id: 'mttr-1',
-          mttr_minutos: 60,
-          evento: 'Cierre',
+          source: 'incidents',
+          event_type: 'incident_resolved',
+          payload: expect.objectContaining({
+            incident_id: 'mttr-1',
+            resolution_time_hours: 1,
+            sla_met: true,
+          })
         }),
       );
 
@@ -399,24 +424,29 @@ describe('IncidentesService', () => {
         slaVencido: false,
         prioridad: 'ALTA',
       };
+      const incidenteActualizado = {
+        ...mockIncidente,
+        estado: IncidenteEstado.CERRADO,
+        fechaResolucion: new Date(),
+      };
 
       mockQueryRunner.manager.findOne.mockResolvedValue(mockIncidente);
       mockQueryRunner.manager.save
-        .mockResolvedValueOnce({ ...mockIncidente, estado: IncidenteEstado.CERRADO, fechaResolucion: new Date() })
+        .mockResolvedValueOnce(incidenteActualizado)
         .mockResolvedValueOnce({});
       mockHttpService.post.mockReturnValue(throwError(() => new Error('P09 unavailable')));
       mockAuditoriaRepository.save.mockResolvedValue({ id: 'audit-3' });
 
-      await expect(
-        service.cambiarEstado('error-webhook', { estado: IncidenteEstado.CERRADO, usuarioId: 'user1' }),
-      ).resolves.toBeDefined();
+      const result = await service.cambiarEstado('error-webhook', { estado: IncidenteEstado.CERRADO, usuarioId: 'user1' });
 
+      expect(result.estado).toBe(IncidenteEstado.CERRADO);
+      expect(mockHttpService.post).toHaveBeenCalled();
       expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
       expect(mockAuditoriaRepository.save).toHaveBeenCalledWith(
         expect.objectContaining({
           incidenteId: 'error-webhook',
           accionPorUsuarioId: 'user1',
-          descripcionAccion: expect.stringContaining('Fallo al enviar evento a P09: Cierre'),
+          descripcionAccion: expect.stringContaining('Fallo al enviar evento a P09: incident_resolved'),
         }),
       );
     });
