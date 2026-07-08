@@ -150,7 +150,7 @@ export async function POST(request: Request) {
           },
           body: JSON.stringify({
             sistema_id: sistemaId,
-            creado_en: new Date().toISOString(),
+            creado_en: body.detectedAt || new Date().toISOString(),
             payload: {
               titulo: body.titulo,
               descripcion: body.descripcion,
@@ -159,15 +159,34 @@ export async function POST(request: Request) {
           }),
         });
       } else {
-        // Fallback: Usa la lógica directa con JWT
+        // Fallback: Usa la lógica directa con JWT.
+        // El backend usa ValidationPipe con forbidNonWhitelisted: true, por lo que
+        // solo se deben enviar los campos declarados en CreateIncidenteDto. Enviar
+        // campos extra (p.ej. detectedAt) provoca un 400 "property should not exist".
         url = `${BACKEND_URL.replace(/\/$/, '')}/api/v1/incidentes`;
+
+        const cleanPayload: Record<string, unknown> = {
+          titulo: body.titulo,
+          descripcion: body.descripcion,
+          sistemaId,
+          creadorUsuarioId: body.creadorUsuarioId,
+          prioridad: body.prioridad,
+        };
+
+        if (body.estado) {
+          cleanPayload.estado = body.estado;
+        }
+        if (body.asignadoAUsuarioId) {
+          cleanPayload.asignadoAUsuarioId = body.asignadoAUsuarioId;
+        }
+
         res = await fetch(url, {
           method: 'POST',
-          headers: { 
+          headers: {
             'content-type': 'application/json',
             ...(authHeader ? { 'Authorization': authHeader } : {})
           },
-          body: JSON.stringify(body),
+          body: JSON.stringify(cleanPayload),
         });
       }
 
