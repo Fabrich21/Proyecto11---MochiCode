@@ -1,4 +1,3 @@
-
 export enum IncidenteEstado {
   ABIERTO = 'ABIERTO',
   ASIGNADO = 'ASIGNADO',
@@ -95,8 +94,8 @@ export function getIncidentStatusBadgeClassName(status?: string | IncidentStatus
 
 export interface Incident {
   id: string;
-  externalId?: string;  
-  externalSource?: string;        
+  externalId?: string;
+  externalSource?: string;
   title?: string;
   severity: IncidentSeverity;
   system: string;
@@ -105,6 +104,7 @@ export interface Incident {
   slaRemaining: number;
   slaPercentage: number;
   createdAt: Date | string;
+  detectedAt?: Date | string | null;
   affectedUsers?: number;
   affectedProject?: string;
   incidentStatus?: IncidentStatus | string;

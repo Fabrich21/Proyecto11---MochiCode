@@ -1,15 +1,13 @@
 'use client';
-
 import { useState, useMemo, useEffect } from 'react';
 import { Search, Plus } from 'lucide-react';
 import { IncidentCard } from './incident-card';
-import { Incident } from './incident-types';
+import { Incident, IncidenteEstado, normalizeIncidentStatus } from './incident-types';
 import IncidentDetailModal from './incident-detail-modal';
 import SlaViewer from './sla-viewer';
 import { NewIncidentModal } from './new-incident-modal';
 import { useWebSockets } from '../hooks/useWebSockets';
 import { useAuth } from '../context/useAuth';
-import { IncidenteEstado } from './incident-types';
 
 type BackendIncident = {
   id: string;
@@ -34,6 +32,16 @@ type BackendIncident = {
   resolucion?: string | null;
   solucion?: string | null;
   solution?: string | null;
+  externalId?: string;
+  external_id?: string;
+  externalSource?: string;
+  external_source?: string;
+  alertPayload?: Record<string, unknown> | string | null;
+  alert_payload?: Record<string, unknown> | string | null;
+  eventType?: 'created' | 'resolved' | 'updated';
+  event_type?: 'created' | 'resolved' | 'updated';
+  detectedAt?: string | Date | null;
+  detected_at?: string | Date | null;
 };
 
 function mapSeverity(value?: string): Incident['severity'] {
@@ -94,6 +102,11 @@ function mapBackendIncident(backendIncidente: BackendIncident): Incident {
     acknowledgedAt: backendIncidente.acknowledgedAt ?? null,
     resolvedAt: backendIncidente.fechaResolucion ?? null,
     closedAt: backendIncidente.estado === 'CERRADO' ? (backendIncidente.fechaResolucion ?? new Date().toISOString()) : null,
+    externalId: backendIncidente.externalId || backendIncidente.external_id || undefined,
+    externalSource: backendIncidente.externalSource || backendIncidente.external_source || undefined,
+    alertPayload: backendIncidente.alertPayload || backendIncidente.alert_payload || null,
+    eventType: backendIncidente.eventType || backendIncidente.event_type || undefined,
+    detectedAt: backendIncidente.detectedAt || backendIncidente.detected_at || backendIncidente.creadoEn || null,
   };
 }
 
@@ -101,6 +114,8 @@ export function IncidentDashboard() {
   const keycloak = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSeverity, setSelectedSeverity] = useState<string | null>(null);
+  const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'all' | 'open' | 'closed'>('all');
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
@@ -163,8 +178,6 @@ export function IncidentDashboard() {
   }
 
   useEffect(() => {
-    // Carga inicial de incidentes al montar el dashboard.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     void loadIncidents();
   }, [keycloak?.token]);
 
@@ -200,7 +213,7 @@ export function IncidentDashboard() {
 
   function handleResolve(incident: Incident) {
     if (incident.resolvedAt) return;
-    updateIncident({ ...incident, resolvedAt: new Date(), incidentStatus: IncidenteEstado.CERRADO });
+    updateIncident({ ...incident, resolvedAt: new Date(), incidentStatus: IncidenteEstado.RESUELTO });
   }
 
   function handleCloseIncident(incident: Incident) {
@@ -209,7 +222,6 @@ export function IncidentDashboard() {
   }
 
   function handleIncidentCreated() {
-    // Recargar lista tras crear incidente
     setLoading(true);
     loadIncidents();
   }
@@ -220,9 +232,19 @@ export function IncidentDashboard() {
       const matchesSearch = !q || [incident.id, incident.system, incident.description, incident.title ?? '']
         .some((s) => s.toLowerCase().includes(q));
       const matchesSeverity = !selectedSeverity || incident.severity === selectedSeverity;
-      return matchesSearch && matchesSeverity;
+      const matchesStatus = !selectedStatus || incident.incidentStatus === selectedStatus;
+      
+      // ✅ Filtro Abierto/Cerrado
+      const normalizedStatus = normalizeIncidentStatus(incident.incidentStatus);
+      const isClosed = normalizedStatus === IncidenteEstado.CERRADO;
+      const matchesOpenClosed = 
+        statusFilter === 'all' || 
+        (statusFilter === 'open' && !isClosed) || 
+        (statusFilter === 'closed' && isClosed);
+      
+      return matchesSearch && matchesSeverity && matchesStatus && matchesOpenClosed;
     });
-  }, [incidents, searchQuery, selectedSeverity]);
+  }, [incidents, searchQuery, selectedSeverity, selectedStatus, statusFilter]);
 
   const sortedIncidents = useMemo(() => {
     const severityOrder: Record<string, number> = { critical: 0, high: 1, medium: 2 };
@@ -285,7 +307,8 @@ export function IncidentDashboard() {
           />
         </div>
 
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
+          {/* Filtro de severidad */}
           <select
             value={selectedSeverity || ''}
             onChange={(e) => {
@@ -298,6 +321,39 @@ export function IncidentDashboard() {
             <option value="critical">Críticos</option>
             <option value="high">Altos</option>
             <option value="medium">Medios</option>
+          </select>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as 'all' | 'open' | 'closed');
+              setCurrentPage(1);
+            }}
+            className="rounded-lg border border-border bg-white px-4 py-2 font-medium text-foreground transition-colors hover:bg-secondary/20 cursor-pointer"
+          >
+            <option value="all">Todos</option>
+            <option value="open">Abiertos</option>
+            <option value="closed">errados</option>
+          </select>
+
+          {/* Filtro de estado detallado */}
+          <select
+            value={selectedStatus || ''}
+            onChange={(e) => {
+              setSelectedStatus(e.target.value || null);
+              setCurrentPage(1);
+            }}
+            className="rounded-lg border border-border bg-white px-4 py-2 font-medium text-foreground transition-colors hover:bg-secondary/20 cursor-pointer"
+          >
+            <option value="">Todos los estados</option>
+            <option value="ABIERTO">Abierto</option>
+            <option value="ASIGNADO">Asignado</option>
+            <option value="EN_PROGRESO">En Progreso</option>
+            <option value="EN_INVESTIGACION">En Investigación</option>
+            <option value="EN_RESOLUCION">En Resolución</option>
+            <option value="RESUELTO">Resuelto</option>
+            <option value="CERRADO">Cerrado</option>
+            <option value="REABIERTO">Reabierto</option>
           </select>
 
           <div className="flex items-center gap-2 px-3 rounded-lg border border-border bg-white shadow-sm">

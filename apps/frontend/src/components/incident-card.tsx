@@ -69,7 +69,14 @@ export function IncidentCard({ incident, onClick }: IncidentCardProps) {
             aria-label={onClick ? `Ver detalle del incidente ${incident.id}` : undefined}
           >
             <div className="flex items-center gap-3 mb-2 flex-wrap">
-              <span className="text-sm font-mono text-[#353535]">{incident.id}</span>
+              <span className="text-sm font-mono text-[#353535]">
+                {incident.externalId || incident.id}
+                {incident.externalSource && (
+                  <span className="text-xs text-foreground/40 ml-1">
+                    ({incident.externalSource})
+                  </span>
+                )}
+              </span>
               <span className={cn('px-2 py-1 rounded text-xs font-semibold border', getSeverityColor(incident.severity))}>
                 {getSeverityLabel(incident.severity)}
               </span>

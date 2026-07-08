@@ -41,6 +41,8 @@ export function NewIncidentModal({ onClose, onCreated }: Props) {
   const [prioridad, setPrioridad] = useState('ALTA');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [detectedAt] = useState<string>(new Date().toISOString());
+
 
   useEffect(() => {
     let cancelled = false;
@@ -99,10 +101,10 @@ export function NewIncidentModal({ onClose, onCreated }: Props) {
     setError('');
 
     try {
-      const res = await fetch('/api/incidents', {
+      const res = await fetch('/api/v1/incidents', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ titulo, descripcion, sistemaId, prioridad }),
+        body: JSON.stringify({ titulo, descripcion, sistemaId, prioridad, detectedAt }),
       });
 
       if (!res.ok) {
