@@ -1,11 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { IncidentesService } from './incidentes.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 import { Incidente } from '../database/entities/incidente.entity';
+import { HistorialEstado } from '../database/entities/historial-estado.entity';
 import { Comentario } from '../database/entities/comentario.entity';
 import { Auditoria } from '../database/entities/auditoria.entity';
+import { PoliticaSla } from '../database/entities/politica-sla.entity';
+import { Sistema } from '../database/entities/sistema.entity';
 import { EventsGateway } from '../events/events.gateway';
+import { HttpService } from '@nestjs/axios';
+import { ConfigService } from '@nestjs/config';
+import { P6NotificacionesService } from '../p6-notificaciones/p6-notificaciones.service';
 import { NotFoundException } from '@nestjs/common';
 
 describe('IncidentesService - Comentarios', () => {
@@ -28,6 +34,10 @@ describe('IncidentesService - Comentarios', () => {
           useValue: { findOne: jest.fn() },
         },
         {
+          provide: getRepositoryToken(HistorialEstado),
+          useValue: { save: jest.fn() },
+        },
+        {
           provide: getRepositoryToken(Comentario),
           useValue: {
             create: jest.fn(),
@@ -42,8 +52,16 @@ describe('IncidentesService - Comentarios', () => {
           useValue: { save: jest.fn() },
         },
         {
-          provide: 'DataSource',
-          useValue: {},
+          provide: getRepositoryToken(PoliticaSla),
+          useValue: { findOne: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(Sistema),
+          useValue: { findOne: jest.fn() },
+        },
+        {
+          provide: DataSource,
+          useValue: { createQueryRunner: jest.fn() },
         },
         {
           provide: EventsGateway,
@@ -53,15 +71,15 @@ describe('IncidentesService - Comentarios', () => {
           },
         },
         {
-          provide: 'HttpService',
-          useValue: {},
+          provide: HttpService,
+          useValue: { post: jest.fn() },
         },
         {
-          provide: 'P6NotificacionesService',
-          useValue: {},
+          provide: P6NotificacionesService,
+          useValue: { enviarEmailAsignacionTicket: jest.fn() },
         },
         {
-          provide: 'ConfigService',
+          provide: ConfigService,
           useValue: { get: jest.fn() },
         },
       ],

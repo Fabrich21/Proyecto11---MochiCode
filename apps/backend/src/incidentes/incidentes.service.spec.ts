@@ -4,6 +4,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Incidente } from '../database/entities/incidente.entity';
 import { HistorialEstado } from '../database/entities/historial-estado.entity';
 import { Auditoria } from '../database/entities/auditoria.entity';
+import { Comentario } from '../database/entities/comentario.entity';
 import { DataSource } from 'typeorm';
 import { IncidenteEstado } from '@proyecto/shared-types';
 import { NotFoundException } from '@nestjs/common';
@@ -32,6 +33,13 @@ describe('IncidentesService', () => {
   };
 
   const mockHistorialRepository = {};
+
+  const mockComentarioRepository = {
+    save: jest.fn(),
+    find: jest.fn(),
+    findOne: jest.fn(),
+    delete: jest.fn(),
+  };
 
   const mockPoliticaSlaRepository = {
     findOne: jest.fn(),
@@ -108,6 +116,10 @@ describe('IncidentesService', () => {
         {
           provide: getRepositoryToken(Sistema),
           useValue: mockSistemaRepository,
+        },
+        {
+          provide: getRepositoryToken(Comentario),
+          useValue: mockComentarioRepository,
         },
         {
           provide: DataSource,

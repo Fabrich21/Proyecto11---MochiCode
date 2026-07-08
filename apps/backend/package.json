@@ -13,9 +13,9 @@
     "migration:revert": "npm run migration:revert --prefix ../..",
     "migration:generate": "npm run migration:generate --prefix ../..",
     "migration:create": "npm run migration:create --prefix ../..",
-    "test": "jest --config jest.config.ts",
-    "test:watch": "jest --config jest.config.ts --watch",
-    "test:cov": "jest --config jest.config.ts --coverage",
+    "test": "jest --config jest.config.js",
+    "test:watch": "jest --config jest.config.js --watch",
+    "test:cov": "jest --config jest.config.js --coverage",
     "test:e2e": "jest --config jest-e2e.config.js --forceExit"
   },
   "dependencies": {

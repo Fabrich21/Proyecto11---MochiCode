@@ -10,8 +10,8 @@ const config = {
   testEnvironment: 'node',
   moduleNameMapper: {
     '^src/(.*)$': '<rootDir>/src/$1',
-    '^@proyecto/shared-types$': '<rootDir>/../../../packages/shared-types/src/index.ts',
+    '^@proyecto/shared-types$': '<rootDir>/../../packages/shared-types/src/index.ts',
   },
 };
 
-export default config;
+module.exports = config;
