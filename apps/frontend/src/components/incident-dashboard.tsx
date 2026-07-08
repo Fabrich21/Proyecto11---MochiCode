@@ -1,5 +1,4 @@
 'use client';
-
 import { useState, useMemo, useEffect } from 'react';
 import { Search, Plus } from 'lucide-react';
 import { IncidentCard } from './incident-card';
@@ -9,6 +8,107 @@ import SlaViewer from './sla-viewer';
 import { NewIncidentModal } from './new-incident-modal';
 import { useWebSockets } from '../hooks/useWebSockets';
 import { useAuth } from '../context/useAuth';
+
+type BackendIncident = {
+  id: string;
+  titulo?: string;
+  prioridad?: string;
+  priority?: string;
+  severity?: string;
+  sistemaId?: string;
+  sistema_id?: string;
+  descripcion?: string;
+  creadoEn?: string | Date;
+  estado?: string;
+  fechaResolucion?: string | Date | null;
+  fechaLimiteResolucion?: string | Date | null;
+  fecha_limite_resolucion?: string | Date | null;
+  politicaSla?: {
+    tiempoMaximoResolucionMinutos?: number;
+  } | null;
+  affectedUsers?: number | null;
+  acknowledgedAt?: string | Date | null;
+  resolutionSummary?: string | null;
+  resolucion?: string | null;
+  solucion?: string | null;
+  solution?: string | null;
+  externalId?: string;
+  external_id?: string;
+  externalSource?: string;
+  external_source?: string;
+  alertPayload?: Record<string, unknown> | string | null;
+  alert_payload?: Record<string, unknown> | string | null;
+  eventType?: 'created' | 'resolved' | 'updated';
+  event_type?: 'created' | 'resolved' | 'updated';
+  detectedAt?: string | Date | null;
+  detected_at?: string | Date | null;
+};
+
+function mapSeverity(value?: string): Incident['severity'] {
+  const normalized = String(value ?? 'MEDIA').toUpperCase();
+
+  if (normalized === 'CRITICA' || normalized === 'CRITICAL' || normalized === 'URGENTE') {
+    return 'critical';
+  }
+
+  if (normalized === 'ALTA' || normalized === 'HIGH') {
+    return 'high';
+  }
+
+  return 'medium';
+}
+
+function mapBackendIncident(backendIncidente: BackendIncident): Incident {
+  const prioridadMap: Record<string, string> = {
+    CRITICA: 'critical',
+    ALTA: 'high',
+    MEDIA: 'medium',
+    BAJA: 'medium',
+  };
+
+  const prioridadNormalizada = String(backendIncidente.prioridad ?? backendIncidente.priority ?? backendIncidente.severity ?? 'MEDIA').toUpperCase();
+
+  let slaRemaining = 0;
+  let slaPercentage = 0;
+  let slaTargetMinutes = 60;
+
+  const limiteSla = backendIncidente.fechaLimiteResolucion || backendIncidente.fecha_limite_resolucion;
+  if (limiteSla) {
+    const now = new Date();
+    const limite = new Date(limiteSla);
+    slaRemaining = Math.max(0, Math.round((limite.getTime() - now.getTime()) / 60000));
+    if (backendIncidente.politicaSla?.tiempoMaximoResolucionMinutos) {
+      slaTargetMinutes = backendIncidente.politicaSla.tiempoMaximoResolucionMinutos;
+    }
+    const elapsedMinutes = slaTargetMinutes - slaRemaining;
+    slaPercentage = Math.round((elapsedMinutes / slaTargetMinutes) * 100);
+    slaPercentage = Math.min(100, Math.max(0, slaPercentage));
+  }
+
+  return {
+    id: backendIncidente.id,
+    title: backendIncidente.titulo || `Incidente ${backendIncidente.id}`,
+    severity: mapSeverity(prioridadMap[prioridadNormalizada] || prioridadNormalizada),
+    system: backendIncidente.sistemaId || backendIncidente.sistema_id || 'Desconocido',
+    description: backendIncidente.descripcion || backendIncidente.titulo || 'Sin descripción',
+    resolutionSummary: backendIncidente.resolutionSummary || backendIncidente.resolucion || backendIncidente.solucion || backendIncidente.solution || null,
+    slaRemaining,
+    slaPercentage,
+    createdAt: backendIncidente.creadoEn || new Date(),
+    incidentStatus: backendIncidente.estado || IncidenteEstado.ABIERTO,
+    slaTargetMinutes,
+    affectedProject: backendIncidente.sistemaId ?? undefined,
+    affectedUsers: backendIncidente.affectedUsers ?? undefined,
+    acknowledgedAt: backendIncidente.acknowledgedAt ?? null,
+    resolvedAt: backendIncidente.fechaResolucion ?? null,
+    closedAt: backendIncidente.estado === 'CERRADO' ? (backendIncidente.fechaResolucion ?? new Date().toISOString()) : null,
+    externalId: backendIncidente.externalId || backendIncidente.external_id || undefined,
+    externalSource: backendIncidente.externalSource || backendIncidente.external_source || undefined,
+    alertPayload: backendIncidente.alertPayload || backendIncidente.alert_payload || null,
+    eventType: backendIncidente.eventType || backendIncidente.event_type || undefined,
+    detectedAt: backendIncidente.detectedAt || backendIncidente.detected_at || backendIncidente.creadoEn || null,
+  };
+}
 
 const FILTER_OPTIONS = [
   { value: 'all', label: 'Todos' },
@@ -22,12 +122,10 @@ const FILTER_OPTIONS = [
 
 type FilterOption = typeof FILTER_OPTIONS[number]['value'];
 
-// ... (resto de tipos y funciones mapBackendIncident igual que antes) ...
-
 export function IncidentDashboard() {
   const keycloak = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterOption, setFilterOption] = useState<FilterOption>('all'); // ✅ Solo un filtro
+  const [filterOption, setFilterOption] = useState<FilterOption>('all'); 
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [loading, setLoading] = useState(true);
@@ -234,7 +332,7 @@ export function IncidentDashboard() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* ✅ Filtro combinado único */}
+          
           <select
             value={filterOption}
             onChange={(e) => {
