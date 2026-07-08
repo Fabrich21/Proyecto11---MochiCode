@@ -5,7 +5,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import { Incidente } from '../database/entities/incidente.entity';
-import { IncidenteEstado, IP9EventoOperacionalCierre } from '@proyecto/shared-types';
+import { IncidenteEstado, IP9Envelope, IP9Payload, P9EventType, P9Severity, P9Status } from '@proyecto/shared-types';
 import { HistorialEstado } from '../database/entities/historial-estado.entity';
 import { Auditoria } from '../database/entities/auditoria.entity';
 import { Comentario } from '../database/entities/comentario.entity';
@@ -46,7 +46,7 @@ export class IncidentesService {
   ) {
     this.p9AnaliticaUrl = this.configService.get<string>(
       'P9_ANALITICA_URL',
-      'http://p9-analitica/api/v1/ingesta/eventos-operacionales',
+      'http://p9-analitica/v1/events',
     )!;
   }
 
@@ -170,6 +170,12 @@ export class IncidentesService {
       });
 
       await queryRunner.commitTransaction();
+      
+      // Notificar a Analítica (P9) la creación del incidente de forma asíncrona (no bloqueante)
+      this.notificarEventoAP9(incidenteGuardado, createDto.creadorUsuarioId, 'incident_created').catch(err => {
+        this.logger.error(`Error al notificar creación a P9 en background`, err);
+      });
+
       return incidenteGuardado;
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -218,9 +224,14 @@ export class IncidentesService {
 
       this.eventsGateway.emitEstadoActualizado(incidente.id, updateDto.estado);
 
+      const p9EventType: P9EventType = updateDto.estado === IncidenteEstado.CERRADO ? 'incident_resolved' : 'incident_status_changed';
+      
+      // Notificar a Analítica (P9) el cambio de estado (no bloqueante para no afectar SLA del response)
+      this.notificarEventoAP9(incidenteActualizado, updateDto.usuarioId!, p9EventType).catch(err => {
+        this.logger.error(`Error al notificar cambio de estado a P9 en background`, err);
+      });
+
       if (updateDto.estado === IncidenteEstado.CERRADO) {
-        await this.notificarCierreAP9(incidenteActualizado, updateDto.usuarioId!);
-        
         const emailDefault = this.configService.get<string>('P6_DEFAULT_EMAIL');
         if (emailDefault) {
           try {
@@ -307,43 +318,72 @@ export class IncidentesService {
     return incidenteActualizado;
   }
 
-  private async notificarCierreAP9(incidente: Incidente, usuarioId: string): Promise<void> {
-    const fechaResolucion = incidente.fechaResolucion ?? new Date();
-    const mttrMinutos = this.calcularMttrMinutos(incidente.creadoEn, fechaResolucion);
+  private mapPrioridadP9(prioridad: string): P9Severity {
+    switch (prioridad) {
+      case 'CRITICA': return 'critical';
+      case 'ALTA': return 'high';
+      case 'MEDIA': return 'medium';
+      case 'BAJA': return 'low';
+      default: return 'medium';
+    }
+  }
 
-    const payload: IP9EventoOperacionalCierre = {
-      evento: 'Cierre',
-      incidente_id: incidente.id,
-      sistema_id: incidente.sistemaId,
-      estado_final: incidente.estado,
-      creado_en: incidente.creadoEn?.toISOString?.() ?? fechaResolucion.toISOString(),
-      fecha_resolucion: fechaResolucion.toISOString(),
-      mttr_minutos: mttrMinutos,
-      sla_vencido: incidente.slaVencido,
-      prioridad: incidente.prioridad,
+  private mapEstadoP9(estado: IncidenteEstado): P9Status {
+    switch (estado) {
+      case IncidenteEstado.CERRADO: return 'resolved';
+      case IncidenteEstado.EN_PROGRESO: return 'investigating';
+      case IncidenteEstado.ABIERTO:
+      case IncidenteEstado.VENCIDO:
+      default: return 'open';
+    }
+  }
+
+  private async notificarEventoAP9(incidente: Incidente, usuarioId: string, eventType: P9EventType): Promise<void> {
+    const payloadData: IP9Payload = {
+      incident_id: incidente.id,
+      title: (eventType === 'incident_created' || eventType === 'incident_status_changed') ? incidente.titulo : undefined,
+      severity: this.mapPrioridadP9(incidente.prioridad),
+      status: this.mapEstadoP9(incidente.estado),
+    };
+
+    if (eventType === 'incident_created') {
+      payloadData.opened_at = incidente.creadoEn?.toISOString() ?? new Date().toISOString();
+    }
+
+    if (eventType === 'incident_resolved') {
+      const fechaResolucion = incidente.fechaResolucion ?? new Date();
+      payloadData.resolved_at = fechaResolucion.toISOString();
+      payloadData.resolution_time_hours = this.calcularMttrHoras(incidente.creadoEn, fechaResolucion);
+      payloadData.sla_met = !incidente.slaVencido;
+    }
+
+    const envelope: IP9Envelope = {
+      source: 'incidents',
+      event_type: eventType,
+      payload: payloadData,
     };
 
     try {
       await firstValueFrom(
-        this.httpService.post(this.p9AnaliticaUrl, payload),
+        this.httpService.post(this.p9AnaliticaUrl, envelope),
       );
 
       await this.registrarAuditoriaEventoP9(
         incidente.id,
         usuarioId,
-        `Evento enviado a P09: Cierre (MTTR=${mttrMinutos} min).`,
+        `Evento enviado a P09: ${eventType}.`,
       );
 
-      this.logger.log(`Evento de cierre enviado a P09 para incidente ${incidente.id}.`);
+      this.logger.log(`Evento ${eventType} enviado a P09 para incidente ${incidente.id}.`);
     } catch (error) {
       await this.registrarAuditoriaEventoP9(
         incidente.id,
         usuarioId,
-        `Fallo al enviar evento a P09: Cierre (MTTR=${mttrMinutos} min).`,
+        `Fallo al enviar evento a P09: ${eventType}.`,
       );
 
       this.logger.error(
-        `No se pudo enviar el evento de cierre a P09 para incidente ${incidente.id}`,
+        `No se pudo enviar el evento ${eventType} a P09 para incidente ${incidente.id}`,
         error,
       );
     }
@@ -368,13 +408,13 @@ export class IncidentesService {
     }
   }
 
-  private calcularMttrMinutos(creadoEn: Date | undefined, fechaResolucion: Date): number {
+  private calcularMttrHoras(creadoEn: Date | undefined, fechaResolucion: Date): number {
     if (!creadoEn) {
       return 0;
     }
 
     const diferenciaMs = fechaResolucion.getTime() - creadoEn.getTime();
-    return Math.max(0, Math.round(diferenciaMs / 60000));
+    return Math.max(0, Number((diferenciaMs / 3600000).toFixed(2)));
   }
 
   async crearComentario(
