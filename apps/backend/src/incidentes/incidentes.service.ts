@@ -51,7 +51,18 @@ export class IncidentesService {
   }
 
   async findAll(query: GetIncidentesDto) {
-    const { page = 1, limit = 10, estado, sistema_id, orden = 'DESC' } = query;
+    const {
+      page = 1,
+      limit = 10,
+      estado,
+      sistema_id,
+      orden = 'DESC',
+      prioridad,
+      asignado_a,
+      fecha_desde,
+      fecha_hasta,
+      q,
+    } = query;
     const skip = (page - 1) * limit;
 
     const queryBuilder = this.incidenteRepository.createQueryBuilder('incidente')
@@ -63,6 +74,29 @@ export class IncidentesService {
 
     if (sistema_id) {
       queryBuilder.andWhere('incidente.sistemaId = :sistema_id', { sistema_id });
+    }
+
+    if (prioridad) {
+      queryBuilder.andWhere('incidente.prioridad = :prioridad', { prioridad });
+    }
+
+    if (asignado_a) {
+      queryBuilder.andWhere('incidente.asignadoAUsuarioId = :asignado_a', { asignado_a });
+    }
+
+    if (fecha_desde) {
+      queryBuilder.andWhere('incidente.creadoEn >= :fecha_desde', { fecha_desde });
+    }
+
+    if (fecha_hasta) {
+      queryBuilder.andWhere('incidente.creadoEn <= :fecha_hasta', { fecha_hasta });
+    }
+
+    if (q) {
+      queryBuilder.andWhere(
+        '(incidente.titulo ILIKE :q OR incidente.descripcion ILIKE :q)',
+        { q: `%${q}%` },
+      );
     }
 
     queryBuilder.orderBy('incidente.creadoEn', orden);
