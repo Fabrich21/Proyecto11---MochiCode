@@ -134,6 +134,9 @@ export async function POST(request: Request) {
       const sistemaId = normalizeSystemId(body.sistemaId || body.sistema_id || body.system);
       const apiKey = getApiKeyForSystem(sistemaId);
 
+      console.log('[POST /api/incidents] Payload:', JSON.stringify(body, null, 2));
+      console.log('[POST /api/incidents] BACKEND_URL:', BACKEND_URL);
+
       let url, res;
 
       if (apiKey) {
