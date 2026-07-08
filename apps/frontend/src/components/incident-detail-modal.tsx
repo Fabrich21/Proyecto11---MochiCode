@@ -1,10 +1,11 @@
 'use client';
 
-import React from 'react';
-import { X, Check, Archive, Clock, Users, FileText, AlertTriangle } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { X, Check, Archive, Clock, Users, FileText, AlertTriangle, MessageSquare, Send } from 'lucide-react';
 import { Incident, IncidenteEstado, getIncidentStatusBadgeClassName, getIncidentStatusLabel, normalizeIncidentStatus } from './incident-types';
 import { cn } from '@/lib/utils';
 import { formatDate, formatNumberES } from '@/lib/format';
+import { useAuth } from '@/context/useAuth';
 
 interface Props {
   incident: Incident;
@@ -12,6 +13,14 @@ interface Props {
   onAcknowledge: (i: Incident) => void;
   onResolve: (i: Incident) => void;
   onCloseIncident: (i: Incident) => void;
+}
+
+interface Comentario {
+  id: string;
+  incidenteId: string;
+  usuarioId: string;
+  contenido: string;
+  creadoEn: string;
 }
 
 // Limpia la descripción si viene como JSON del backend
@@ -48,6 +57,66 @@ function getSeverityLabel(severity: string) {
 }
 
 export function IncidentDetailModal({ incident, onClose, onAcknowledge, onResolve, onCloseIncident }: Props) {
+  const keycloak = useAuth();
+  const [comentarios, setComentarios] = useState<Comentario[]>([]);
+  const [comentariosLoading, setComentariosLoading] = useState(true);
+  const [comentariosError, setComentariosError] = useState('');
+  const [nuevoComentario, setNuevoComentario] = useState('');
+  const [enviando, setEnviando] = useState(false);
+
+  const loadComentarios = useCallback(async () => {
+    setComentariosLoading(true);
+    setComentariosError('');
+    try {
+      const res = await fetch(`/api/incidents/${encodeURIComponent(incident.id)}/comentarios`, {
+        cache: 'no-store',
+        headers: { Authorization: `Bearer ${keycloak?.token || ''}` },
+      });
+      if (!res.ok) {
+        throw new Error('No se pudieron cargar los comentarios');
+      }
+      const data: unknown = await res.json();
+      setComentarios(Array.isArray(data) ? (data as Comentario[]) : []);
+    } catch (err) {
+      setComentariosError(err instanceof Error ? err.message : 'Error al cargar comentarios');
+    } finally {
+      setComentariosLoading(false);
+    }
+  }, [incident.id, keycloak?.token]);
+
+  useEffect(() => {
+    void loadComentarios();
+  }, [loadComentarios]);
+
+  async function handleEnviarComentario() {
+    const contenido = nuevoComentario.trim();
+    if (!contenido || enviando) return;
+
+    setEnviando(true);
+    setComentariosError('');
+    try {
+      const res = await fetch(`/api/incidents/${encodeURIComponent(incident.id)}/comentarios`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          Authorization: `Bearer ${keycloak?.token || ''}`,
+        },
+        body: JSON.stringify({ contenido }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || err.error || 'No se pudo agregar el comentario');
+      }
+      const creado: Comentario = await res.json();
+      setComentarios((prev) => [...prev, creado]);
+      setNuevoComentario('');
+    } catch (err) {
+      setComentariosError(err instanceof Error ? err.message : 'Error al enviar comentario');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
   const currentStatus = normalizeIncidentStatus(incident.incidentStatus);
   const isClosed = currentStatus === IncidenteEstado.CERRADO || !!incident.closedAt;
   const isResolved = !!incident.resolvedAt;
@@ -209,6 +278,67 @@ export function IncidentDetailModal({ incident, onClose, onAcknowledge, onResolv
               <InfoBlock label="SLA minutos previstos" value={`${incident.slaTargetMinutes} min`} />
             </div>
           )}
+
+          {/* Comentarios */}
+          <div>
+            <div className="flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-foreground/60" />
+              <p className="text-sm font-semibold text-foreground/70">
+                Comentarios{comentarios.length > 0 ? ` (${comentarios.length})` : ''}
+              </p>
+            </div>
+
+            {comentariosError && (
+              <div className="mt-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+                {comentariosError}
+              </div>
+            )}
+
+            <div className="mt-2 space-y-2">
+              {comentariosLoading && (
+                <p className="text-sm text-foreground/50">Cargando comentarios...</p>
+              )}
+              {!comentariosLoading && comentarios.length === 0 && (
+                <p className="rounded-lg border border-border bg-secondary/10 px-4 py-3 text-sm text-foreground/60">
+                  Aún no hay comentarios en este incidente.
+                </p>
+              )}
+              {!comentariosLoading && comentarios.map((c) => (
+                <div key={c.id} className="rounded-lg border border-border bg-white px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs font-semibold text-foreground/80">{c.usuarioId}</span>
+                    <span className="text-xs text-foreground/50">{formatDate(c.creadoEn)}</span>
+                  </div>
+                  <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{c.contenido}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-3 flex items-end gap-2">
+              <textarea
+                value={nuevoComentario}
+                onChange={(e) => setNuevoComentario(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    void handleEnviarComentario();
+                  }
+                }}
+                placeholder="Escribe un comentario... (Ctrl+Enter para enviar)"
+                rows={2}
+                maxLength={2000}
+                className="w-full resize-none rounded-lg border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#3C6E71]/40"
+              />
+              <button
+                type="button"
+                onClick={() => void handleEnviarComentario()}
+                disabled={enviando || !nuevoComentario.trim()}
+                className="inline-flex items-center gap-2 rounded-md bg-[#3C6E71] px-3 py-2 text-sm font-medium text-white transition hover:bg-[#2d5558] disabled:opacity-50"
+              >
+                <Send className="h-4 w-4" /> {enviando ? 'Enviando...' : 'Enviar'}
+              </button>
+            </div>
+          </div>
         </div>
 
         <footer className="flex items-center justify-end gap-3 border-t border-border px-6 py-4">
