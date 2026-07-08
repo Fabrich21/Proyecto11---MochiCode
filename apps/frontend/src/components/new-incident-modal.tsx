@@ -102,7 +102,7 @@ export function NewIncidentModal({ onClose, onCreated }: Props) {
     setError('');
 
     try {
-      const res = await fetch('/api/v1/incidentes', {
+      const res = await fetch('/api/incidents', {
         method: 'POST',
         headers: { 'content-type': 'application/json',
                 'Authorization': `Bearer ${keycloak?.token || ''}` },

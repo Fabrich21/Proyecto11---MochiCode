@@ -167,7 +167,7 @@ export function IncidentDashboard() {
     try {
       setLoading(true);
       setErrorMsg(null);
-      const res = await fetch('/api/v1/incidentes', {
+      const res = await fetch('/api/incidents', {
         headers: {
           'Authorization': `Bearer ${keycloak?.token || ''}`
         }
@@ -196,7 +196,7 @@ export function IncidentDashboard() {
     setSelectedIncident(updated);
     (async () => {
       try {
-        await fetch(`/api/v1/incidentes/${encodeURIComponent(updated.id)}`, {
+        await fetch(`/api/incidents/${encodeURIComponent(updated.id)}`, {
           method: 'PATCH',
           headers: { 
             'content-type': 'application/json',
