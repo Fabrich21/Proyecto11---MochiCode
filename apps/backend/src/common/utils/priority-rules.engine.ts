@@ -8,7 +8,6 @@ export class PriorityRulesEngine {
    */
   private static readonly REGLAS_ORIGEN: Record<string, string> = {
     'P1': 'CRITICA',
-    'P2': 'ALTA',
     'P7': 'CRITICA',
     'P07': 'CRITICA',
     'P8': 'BAJA',

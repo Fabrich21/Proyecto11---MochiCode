@@ -87,14 +87,14 @@ describe('AlertasProcessor', () => {
     it('should pass the full dto including payload to procesarAlerta', async () => {
       // Arrange
       mockWorkerService.procesarAlerta.mockResolvedValue(undefined);
-      const richDto: CreateAlertaDto = { sistema_id: 'P2', creado_en: new Date().toISOString(), payload: { temp: 95, unit: 'C' } };
+      const richDto: CreateAlertaDto = { sistema_id: 'P1', creado_en: new Date().toISOString(), payload: { temp: 95, unit: 'C' } };
 
       // Act
       await processor.process(buildJob(richDto));
 
       // Assert
       expect(mockWorkerService.procesarAlerta).toHaveBeenCalledWith(
-        expect.objectContaining({ sistema_id: 'P2', payload: { temp: 95, unit: 'C' } }),
+        expect.objectContaining({ sistema_id: 'P1', payload: { temp: 95, unit: 'C' } }),
       );
     });
   });
