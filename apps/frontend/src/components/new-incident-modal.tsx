@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { X } from 'lucide-react';
 import { Incident } from './incident-types';
+import keycloak from '@/lib/keycloak';
 
 interface Props {
   onClose: () => void;
@@ -101,9 +102,10 @@ export function NewIncidentModal({ onClose, onCreated }: Props) {
     setError('');
 
     try {
-      const res = await fetch('/api/v1/incidents', {
+      const res = await fetch('/api/v1/incidentes', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json',
+                'Authorization': `Bearer ${keycloak?.token || ''}` },
         body: JSON.stringify({ titulo, descripcion, sistemaId, prioridad, detectedAt }),
       });
 
