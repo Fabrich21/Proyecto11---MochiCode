@@ -4,6 +4,7 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Incidente } from '../database/entities/incidente.entity';
 import { HistorialEstado } from '../database/entities/historial-estado.entity';
 import { Auditoria } from '../database/entities/auditoria.entity';
+import { Comentario } from '../database/entities/comentario.entity';
 import { DataSource } from 'typeorm';
 import { IncidenteEstado } from '@proyecto/shared-types';
 import { NotFoundException } from '@nestjs/common';
@@ -32,6 +33,13 @@ describe('IncidentesService', () => {
   };
 
   const mockHistorialRepository = {};
+
+  const mockComentarioRepository = {
+    save: jest.fn(),
+    find: jest.fn(),
+    findOne: jest.fn(),
+    delete: jest.fn(),
+  };
 
   const mockPoliticaSlaRepository = {
     findOne: jest.fn(),
@@ -111,6 +119,10 @@ describe('IncidentesService', () => {
           useValue: mockSistemaRepository,
         },
         {
+          provide: getRepositoryToken(Comentario),
+          useValue: mockComentarioRepository,
+        },
+        {
           provide: DataSource,
           useValue: mockDataSource,
         },
@@ -164,6 +176,51 @@ describe('IncidentesService', () => {
 
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('incidente.estado = :estado', { estado: IncidenteEstado.ABIERTO });
       expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('incidente.sistemaId = :sistema_id', { sistema_id: 'P08' });
+    });
+
+    it('debería filtrar por prioridad cuando se envía', async () => {
+      mockQueryBuilder.getManyAndCount.mockResolvedValue([[], 0]);
+
+      await service.findAll({ prioridad: 'ALTA' });
+
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('incidente.prioridad = :prioridad', { prioridad: 'ALTA' });
+    });
+
+    it('debería filtrar por asignado_a cuando se envía', async () => {
+      mockQueryBuilder.getManyAndCount.mockResolvedValue([[], 0]);
+      const userId = 'f7b6d624-bcd8-4f44-b988-f1ce4f6fbb7d';
+
+      await service.findAll({ asignado_a: userId });
+
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('incidente.asignadoAUsuarioId = :asignado_a', { asignado_a: userId });
+    });
+
+    it('debería filtrar por rango de fechas cuando se envían fecha_desde y fecha_hasta', async () => {
+      mockQueryBuilder.getManyAndCount.mockResolvedValue([[], 0]);
+
+      await service.findAll({ fecha_desde: '2026-07-01T00:00:00Z', fecha_hasta: '2026-07-31T23:59:59Z' });
+
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('incidente.creadoEn >= :fecha_desde', { fecha_desde: '2026-07-01T00:00:00Z' });
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith('incidente.creadoEn <= :fecha_hasta', { fecha_hasta: '2026-07-31T23:59:59Z' });
+    });
+
+    it('debería aplicar búsqueda de texto en titulo y descripcion cuando se envía q', async () => {
+      mockQueryBuilder.getManyAndCount.mockResolvedValue([[], 0]);
+
+      await service.findAll({ q: 'pago' });
+
+      expect(mockQueryBuilder.andWhere).toHaveBeenCalledWith(
+        '(incidente.titulo ILIKE :q OR incidente.descripcion ILIKE :q)',
+        { q: '%pago%' },
+      );
+    });
+
+    it('no debería aplicar filtros opcionales cuando no se envían', async () => {
+      mockQueryBuilder.getManyAndCount.mockResolvedValue([[], 0]);
+
+      await service.findAll({});
+
+      expect(mockQueryBuilder.andWhere).not.toHaveBeenCalled();
     });
   });
 

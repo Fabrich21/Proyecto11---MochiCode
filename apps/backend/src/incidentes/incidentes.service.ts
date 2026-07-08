@@ -8,8 +8,10 @@ import { Incidente } from '../database/entities/incidente.entity';
 import { IncidenteEstado, IP9EventoOperacionalCierre } from '@proyecto/shared-types';
 import { HistorialEstado } from '../database/entities/historial-estado.entity';
 import { Auditoria } from '../database/entities/auditoria.entity';
+import { Comentario } from '../database/entities/comentario.entity';
 import { GetIncidentesDto } from './dto/get-incidentes.dto';
 import { UpdateEstadoIncidenteDto } from './dto/update-estado-incidente.dto';
+import { CreateComentarioDto } from './dto/create-comentario.dto';
 import { PoliticaSla } from '../database/entities/politica-sla.entity';
 import { SlaUtil } from '../common/utils/sla.util';
 import { CreateIncidenteDto } from './dto/create-incidente.dto';
@@ -34,6 +36,8 @@ export class IncidentesService {
     private readonly politicaSlaRepository: Repository<PoliticaSla>,
     @InjectRepository(Sistema)
     private readonly sistemaRepository: Repository<Sistema>,
+    @InjectRepository(Comentario)
+    private readonly comentarioRepository: Repository<Comentario>,
     private readonly dataSource: DataSource,
     private readonly eventsGateway: EventsGateway,
     private readonly httpService: HttpService,
@@ -47,7 +51,18 @@ export class IncidentesService {
   }
 
   async findAll(query: GetIncidentesDto) {
-    const { page = 1, limit = 10, estado, sistema_id, orden = 'DESC' } = query;
+    const {
+      page = 1,
+      limit = 10,
+      estado,
+      sistema_id,
+      orden = 'DESC',
+      prioridad,
+      asignado_a,
+      fecha_desde,
+      fecha_hasta,
+      q,
+    } = query;
     const skip = (page - 1) * limit;
 
     const queryBuilder = this.incidenteRepository.createQueryBuilder('incidente')
@@ -59,6 +74,29 @@ export class IncidentesService {
 
     if (sistema_id) {
       queryBuilder.andWhere('incidente.sistemaId = :sistema_id', { sistema_id });
+    }
+
+    if (prioridad) {
+      queryBuilder.andWhere('incidente.prioridad = :prioridad', { prioridad });
+    }
+
+    if (asignado_a) {
+      queryBuilder.andWhere('incidente.asignadoAUsuarioId = :asignado_a', { asignado_a });
+    }
+
+    if (fecha_desde) {
+      queryBuilder.andWhere('incidente.creadoEn >= :fecha_desde', { fecha_desde });
+    }
+
+    if (fecha_hasta) {
+      queryBuilder.andWhere('incidente.creadoEn <= :fecha_hasta', { fecha_hasta });
+    }
+
+    if (q) {
+      queryBuilder.andWhere(
+        '(incidente.titulo ILIKE :q OR incidente.descripcion ILIKE :q)',
+        { q: `%${q}%` },
+      );
     }
 
     queryBuilder.orderBy('incidente.creadoEn', orden);
@@ -337,5 +375,118 @@ export class IncidentesService {
 
     const diferenciaMs = fechaResolucion.getTime() - creadoEn.getTime();
     return Math.max(0, Math.round(diferenciaMs / 60000));
+  }
+
+  async crearComentario(
+    incidenteId: string,
+    createComentarioDto: CreateComentarioDto,
+    usuarioId: string,
+  ): Promise<Comentario> {
+    // Verificar que el incidente existe
+    const incidente = await this.incidenteRepository.findOne({
+      where: { id: incidenteId },
+    });
+
+    if (!incidente) {
+      throw new NotFoundException(
+        `Incidente con ID ${incidenteId} no encontrado`,
+      );
+    }
+
+    // Crear el comentario
+    const comentario = this.comentarioRepository.create({
+      incidenteId,
+      usuarioId,
+      contenido: createComentarioDto.contenido,
+    });
+
+    const comentarioGuardado = await this.comentarioRepository.save(comentario);
+
+    // Registrar auditoría
+    await this.auditoriaRepository.save({
+      incidenteId,
+      accionPorUsuarioId: usuarioId,
+      descripcionAccion: `Comentario agregado: "${createComentarioDto.contenido.substring(0, 50)}..."`,
+    });
+
+    // Emitir evento en tiempo real vía WebSocket
+    this.eventsGateway.emitNuevoComentario(incidenteId, comentarioGuardado);
+
+    this.logger.log(
+      `Comentario creado en incidente ${incidenteId} por usuario ${usuarioId}`,
+    );
+
+    return comentarioGuardado;
+  }
+
+  async obtenerComentarios(incidenteId: string): Promise<Comentario[]> {
+    // Verificar que el incidente existe
+    const incidente = await this.incidenteRepository.findOne({
+      where: { id: incidenteId },
+    });
+
+    if (!incidente) {
+      throw new NotFoundException(
+        `Incidente con ID ${incidenteId} no encontrado`,
+      );
+    }
+
+    const comentarios = await this.comentarioRepository.find({
+      where: { incidenteId },
+      order: { creadoEn: 'ASC' },
+    });
+
+    return comentarios;
+  }
+
+  async eliminarComentario(
+    incidenteId: string,
+    comentarioId: string,
+    usuarioId: string,
+  ): Promise<void> {
+    // Verificar que el incidente existe
+    const incidente = await this.incidenteRepository.findOne({
+      where: { id: incidenteId },
+    });
+
+    if (!incidente) {
+      throw new NotFoundException(
+        `Incidente con ID ${incidenteId} no encontrado`,
+      );
+    }
+
+    // Obtener el comentario
+    const comentario = await this.comentarioRepository.findOne({
+      where: { id: comentarioId, incidenteId },
+    });
+
+    if (!comentario) {
+      throw new NotFoundException(
+        `Comentario con ID ${comentarioId} no encontrado en incidente ${incidenteId}`,
+      );
+    }
+
+    // Solo el creador o un admin puede eliminar (por ahora solo verificamos que sea el creador)
+    if (comentario.usuarioId !== usuarioId) {
+      throw new Error(
+        'Solo el creador del comentario puede eliminarlo',
+      );
+    }
+
+    await this.comentarioRepository.delete(comentarioId);
+
+    // Registrar auditoría
+    await this.auditoriaRepository.save({
+      incidenteId,
+      accionPorUsuarioId: usuarioId,
+      descripcionAccion: `Comentario eliminado: "${comentario.contenido.substring(0, 50)}..."`,
+    });
+
+    // Emitir evento en tiempo real vía WebSocket
+    this.eventsGateway.emitComentarioEliminado(incidenteId, comentarioId);
+
+    this.logger.log(
+      `Comentario ${comentarioId} eliminado en incidente ${incidenteId} por usuario ${usuarioId}`,
+    );
   }
 }

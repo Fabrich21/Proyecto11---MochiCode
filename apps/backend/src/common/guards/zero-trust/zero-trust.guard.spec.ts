@@ -42,11 +42,6 @@ describe('ZeroTrustGuard', () => {
       expect(guard.canActivate(ctx)).toBe(true);
     });
 
-    it('should return true when P2 sends valid api key', () => {
-      const ctx = buildContext('auth_p2_secret', 'P2');
-      expect(guard.canActivate(ctx)).toBe(true);
-    });
-
     it('should return true when P8 sends valid api key', () => {
       const ctx = buildContext('auth_p8_secret', 'P8');
       expect(guard.canActivate(ctx)).toBe(true);

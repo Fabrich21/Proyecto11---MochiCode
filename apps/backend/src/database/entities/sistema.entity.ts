@@ -3,7 +3,7 @@ import { Column, Entity, PrimaryColumn } from 'typeorm';
 /**
  * Entidad que mapea la tabla "sistemas".
  * Representa cada proyecto externo registrado que puede enviar alertas
- * (ej: P1-Salud, P2-Logística, P8-IoT).
+ * (ej: P1-Salud, P8-IoT).
  */
 @Entity('sistemas')
 export class Sistema {

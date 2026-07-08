@@ -38,6 +38,11 @@ export interface IGetIncidentesDto {
   estado?: IncidenteEstado;
   sistema_id?: string;
   orden?: 'ASC' | 'DESC';
+  prioridad?: string;
+  asignado_a?: string;
+  fecha_desde?: string;
+  fecha_hasta?: string;
+  q?: string;
 }
 
 export interface IP9EventoOperacionalCierre {
