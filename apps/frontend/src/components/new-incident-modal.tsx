@@ -102,11 +102,13 @@ export function NewIncidentModal({ onClose, onCreated }: Props) {
     setError('');
 
     try {
+         const creadorUsuarioId = keycloak?.tokenParsed?.sub || '00000000-0000-0000-0000-000000000001';
+
       const res = await fetch('/api/incidents', {
         method: 'POST',
         headers: { 'content-type': 'application/json',
                 'Authorization': `Bearer ${keycloak?.token || ''}` },
-        body: JSON.stringify({ titulo, descripcion, sistemaId, prioridad, detectedAt }),
+        body: JSON.stringify({ titulo, descripcion, sistemaId, prioridad, detectedAt, creadorUsuarioId, estado: 'ABIERTO' }),
       });
 
       if (!res.ok) {
