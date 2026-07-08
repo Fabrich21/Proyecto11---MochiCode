@@ -80,6 +80,39 @@ export class IncidentesController {
     return this.incidentesService.findAll(query);
   }
 
+  @Get('me')
+  @ApiOperation({ summary: 'Listar los incidentes asignados al usuario autenticado' })
+  @ApiOkResponse({
+    description: 'Listado paginado de incidentes asignados al usuario en sesion',
+    schema: {
+      example: {
+        data: [
+          {
+            id: '2f4c4b54-2164-4962-a98d-22f944098f92',
+            sistemaId: 'P08',
+            estado: 'EN_PROGRESO',
+            prioridad: 'ALTA',
+            asignadoAUsuarioId: 'f7b6d624-bcd8-4f44-b988-f1ce4f6fbb7d',
+            creadoEn: '2026-07-07T15:00:00.000Z',
+            fechaResolucion: null,
+          },
+        ],
+        meta: {
+          total_registros: 1,
+          pagina_actual: 1,
+          total_paginas: 1,
+          registros_por_pagina: 10,
+        },
+      },
+    },
+  })
+  findMisIncidentes(@Query() query: GetIncidentesDto, @Request() req: any) {
+    return this.incidentesService.findAll({
+      ...query,
+      asignado_a: req.user.userId,
+    });
+  }
+
   @Patch(':id/estado')
   @ApiOperation({ summary: 'Cambiar estado de un incidente por ID' })
   @ApiParam({ name: 'id', description: 'UUID del incidente' })
@@ -108,6 +141,25 @@ export class IncidentesController {
   }
 
   @Patch(':id/asignar')
+  @ApiOperation({ summary: 'Asignar un responsable a un incidente por ID' })
+  @ApiParam({ name: 'id', description: 'UUID del incidente' })
+  @ApiBody({ type: AsignarIncidenteDto })
+  @ApiOkResponse({
+    description: 'Incidente asignado correctamente',
+    schema: {
+      example: {
+        id: '2f4c4b54-2164-4962-a98d-22f944098f92',
+        titulo: 'Caida de servicio de pagos',
+        sistemaId: 'P04',
+        estado: 'ABIERTO',
+        prioridad: 'ALTA',
+        asignadoAUsuarioId: '65a6c7d2-9dc8-4e53-b6b0-0f55bd7d5f6d',
+        creadoEn: '2026-07-07T15:00:00.000Z',
+        fechaResolucion: null,
+      },
+    },
+  })
+  @ApiNotFoundResponse({ description: 'Incidente no encontrado' })
   asignarIncidente(
     @Param('id') id: string,
     @Body() asignarIncidenteDto: AsignarIncidenteDto,
