@@ -70,6 +70,7 @@ describe('IncidentesService', () => {
 
   const mockP6NotificacionesService = {
     enviarEmailAsignacionTicket: jest.fn(),
+    enviarEmailResolucionTicket: jest.fn(),
   };
 
   const mockConfigService = {
