@@ -19,6 +19,7 @@ export interface IIncidente {
   fechaResolucion?: Date;
   slaVencido: boolean;
   fechaLimiteResolucion?: Date;
+  crmTicketId?: string;
 }
 
 export interface IUpdateEstadoIncidenteDto {

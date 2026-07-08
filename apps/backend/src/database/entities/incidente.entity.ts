@@ -63,6 +63,9 @@ export class Incidente implements IIncidente {
   @Column({ name: 'fecha_resolucion', type: 'timestamptz', nullable: true })
   fechaResolucion?: Date;
 
+  @Column({ name: 'crm_ticket_id', type: 'varchar', length: 100, nullable: true })
+  crmTicketId?: string;
+
   // FLAG activado por el SlaScheduler cuando el ticket supera el tiempo de la política SLA.
   // Una vez en TRUE, el cron no vuelve a procesar el mismo incidente.
   @Column({ name: 'sla_vencido', type: 'boolean', default: false })

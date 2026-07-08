@@ -167,4 +167,13 @@ export class IncidentesController {
       req.user.userId,
     );
   }
+
+  @Get(':id/playbook')
+  @ApiOperation({ summary: 'Obtener sugerencias de acciones (Playbook) para un incidente' })
+  @ApiParam({ name: 'id', description: 'UUID del incidente' })
+  @ApiOkResponse({ description: 'Lista de acciones sugeridas', type: [String] })
+  @ApiNotFoundResponse({ description: 'Incidente no encontrado' })
+  obtenerPlaybook(@Param('id') incidenteId: string) {
+    return this.incidentesService.obtenerPlaybook(incidenteId);
+  }
 }
