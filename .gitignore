@@ -38,7 +38,3 @@ coverage/
 
 # Docker (Opcional: ignorar si no quieres persistir datos locales fuera de volúmenes)
 # .docker/
-
-# Documentación local temporal
-coherencia.md
-evaluacion-requerimientos-funcionales.md
