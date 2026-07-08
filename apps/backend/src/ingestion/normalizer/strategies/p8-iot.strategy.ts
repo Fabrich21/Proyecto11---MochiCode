@@ -2,8 +2,8 @@ import { IncidenteEstado } from '@proyecto/shared-types';
 import { CreateAlertaDto } from '../../dto/create-alerta.dto';
 import { NormalizedAlerta } from '../../dto/normalized-alerta.dto';
 
-type IotEventType = 'alert_generated' | 'telemetry_received';
-type IotSeverity = 'warning' | 'critical';
+type IotEventType = 'alert_generated' | 'telemetry_received' | 'alert_resolved';
+type IotSeverity = 'warning' | 'critical' | 'resolved';
 type IotConnectionStatus = 'connected' | 'offline';
 type IotSensorType =
   | 'thermometer'
@@ -165,6 +165,10 @@ function inferPriority(input: IotNormalizedInput): NormalizedAlerta['prioridad']
 }
 
 function inferState(input: IotNormalizedInput): IncidenteEstado {
+  if (input.eventType === 'alert_resolved' || input.severity === 'resolved') {
+    return IncidenteEstado.CERRADO;
+  }
+
   if (input.eventType === 'alert_generated') {
     return input.severity === 'critical'
       ? IncidenteEstado.EN_PROGRESO
@@ -179,7 +183,7 @@ function inferState(input: IotNormalizedInput): IncidenteEstado {
 }
 
 function buildTitulo(input: IotNormalizedInput): string {
-  if (input.eventType === 'alert_generated') {
+  if (input.eventType === 'alert_generated' || input.eventType === 'alert_resolved' || input.severity === 'resolved') {
     const alert = input.alertType ?? 'alerta_iot';
     const sensor = input.sensorId ? ` | Sensor ${input.sensorId}` : '';
     return `[P8 IoT] Alerta ${alert}${sensor}`;

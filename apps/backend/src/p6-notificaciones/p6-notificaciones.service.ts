@@ -4,6 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
 import {
   EnviarEmailAsignacionParams,
+  EnviarEmailResolucionParams,
   EnviarNotificacionSlaParams,
   P6NotificationPayload,
 } from './interfaces/p6-notification.types';
@@ -57,6 +58,29 @@ export class P6NotificacionesService {
     );
   }
 
+  /** Conector Email P6 — notifica al cliente final cuando se resuelve su ticket (UAT Paso 18). */
+  async enviarEmailResolucionTicket(params: EnviarEmailResolucionParams): Promise<void> {
+    const subject = `Incidente Resuelto: ${params.titulo}`;
+    const htmlBody = [
+      '<p>Estimado cliente, le informamos que su incidencia ha sido resuelta.</p>',
+      `<p><strong>Incidente:</strong> ${params.titulo}</p>`,
+      `<p><strong>ID de Seguimiento:</strong> ${params.incidenteId}</p>`,
+      `<p><strong>Fecha de resolución:</strong> ${params.fechaResolucion}</p>`,
+      '<p>Gracias por confiar en nuestros servicios.</p>'
+    ].join('');
+
+    await this.send({
+      channel: 'email',
+      recipient: { email: params.email },
+      subject,
+      body: { email: htmlBody },
+    });
+
+    this.logger.log(
+      `Email de resolución enviado a P6 para incidente ${params.incidenteId} → ${params.email}`,
+    );
+  }
+
   /** Conector Móvil P6 — SMS urgente cuando un SLA vence. */
   async enviarNotificacionMovilSlaVencido(params: EnviarNotificacionSlaParams): Promise<void> {
     const mensaje =
@@ -78,7 +102,7 @@ export class P6NotificacionesService {
     await firstValueFrom(
       this.httpService.post(this.apiUrl, payload, {
         headers: {
-          API_KEY_PROYECTO_11: this.apiKey,
+          'x-api-key': this.apiKey,
           'Content-Type': 'application/json',
         },
       }),

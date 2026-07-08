@@ -121,6 +121,27 @@ export class WorkerService {
             '). Agregando evento sin crear ticket duplicado.',
         );
 
+        if (normalizado.estadoSugerido === IncidenteEstado.CERRADO && incidenteActivo.estado !== IncidenteEstado.CERRADO) {
+          await queryRunner.query(
+            `UPDATE "incidentes" SET "estado" = $1, "fecha_resolucion" = now() WHERE "id" = $2`,
+            [IncidenteEstado.CERRADO, incidenteId]
+          );
+
+          await queryRunner.query(
+            'INSERT INTO "historial_estados" ("id", "incidente_id", "estado_anterior", "estado_nuevo", "cambiado_por_usuario_id", "cambiado_en") VALUES (gen_random_uuid(), $1, $2, $3, $4, now())',
+            [
+              incidenteId,
+              incidenteActivo.estado,
+              IncidenteEstado.CERRADO,
+              this.sistemaAutomaticoUuid,
+            ]
+          );
+          
+          this.eventsGateway.emitEstadoActualizado(incidenteId, IncidenteEstado.CERRADO);
+          
+          this.logger.log(`Incidente ${incidenteId} CERRADO automáticamente por evento de resolución.`);
+        }
+
         await queryRunner.query(
           'INSERT INTO "auditoria" ("id", "incidente_id", "accion_por_usuario_id", "descripcion_accion", "creado_en") VALUES (gen_random_uuid(), $1, $2, $3, now())',
           [

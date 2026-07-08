@@ -182,6 +182,20 @@ export class IncidentesService {
 
       if (updateDto.estado === IncidenteEstado.CERRADO) {
         await this.notificarCierreAP9(incidenteActualizado, updateDto.usuarioId!);
+        
+        const emailDefault = this.configService.get<string>('P6_DEFAULT_EMAIL');
+        if (emailDefault) {
+          try {
+            await this.p6NotificacionesService.enviarEmailResolucionTicket({
+              email: emailDefault,
+              incidenteId: incidente.id,
+              titulo: incidente.titulo,
+              fechaResolucion: incidenteActualizado.fechaResolucion?.toISOString() ?? new Date().toISOString()
+            });
+          } catch (error) {
+            this.logger.error(`No se pudo enviar email P6 al cerrar incidente ${incidente.id}`, error);
+          }
+        }
       }
 
       return incidenteActualizado;

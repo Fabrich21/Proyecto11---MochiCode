@@ -38,3 +38,10 @@ export interface EnviarNotificacionSlaParams {
   titulo: string;
   usuarioDestinoId: string;
 }
+
+export interface EnviarEmailResolucionParams {
+  email: string;
+  incidenteId: string;
+  titulo: string;
+  fechaResolucion: string;
+}

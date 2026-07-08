@@ -26,6 +26,22 @@ export class PriorityRulesEngine {
   static calcularPrioridad(sistemaId: string, payload?: any): string {
     const sistema = sistemaId?.toUpperCase();
 
+    // Reglas específicas para Salud (P1).
+    if (sistema === 'P1' || sistema === 'P01') {
+      const severity = payload?.severity;
+      const eventType = payload?.eventType;
+      
+      if (severity === 'critical') return 'CRITICA';
+      if (severity === 'high') return 'ALTA';
+      if (severity === 'medium') return 'MEDIA';
+      if (severity === 'low') return 'BAJA';
+
+      if (eventType === 'offline_sync_failed' || eventType === 'visit_not_registered' || eventType === 'professional_no_show') {
+        return 'ALTA';
+      }
+      return 'MEDIA';
+    }
+
     // Reglas específicas para Pasarela (P4/P04).
     if (sistema === 'P4' || sistema === 'P04') {
       const tipo = payload?.tipo;
@@ -77,7 +93,7 @@ export class PriorityRulesEngine {
     }
 
     // Reglas específicas para IoT (P8): priorizamos por severidad operacional.
-    if (sistema === 'P8') {
+    if (sistema === 'P8' || sistema === 'P08') {
       const eventType = payload?.eventType ?? payload?.event_type;
       const severity = payload?.severity ?? payload?.payload?.severity;
       const connectionStatus =

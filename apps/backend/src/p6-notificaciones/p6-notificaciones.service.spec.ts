@@ -55,7 +55,7 @@ describe('P6NotificacionesService', () => {
       }),
       expect.objectContaining({
         headers: expect.objectContaining({
-          API_KEY_PROYECTO_11: 'test-api-key',
+          'x-api-key': 'test-api-key',
         }),
       }),
     );

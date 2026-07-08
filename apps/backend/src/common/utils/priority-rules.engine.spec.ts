@@ -73,8 +73,11 @@ describe('PriorityRulesEngine', () => {
     expect(prioridad).toBe('ALTA');
   });
 
-  it('mantiene regla estatica para P1', () => {
-    const prioridad = PriorityRulesEngine.calcularPrioridad('P1', {});
+  it('calcula prioridad dinamica para P1 segun severity', () => {
+    const prioridad = PriorityRulesEngine.calcularPrioridad('P1', { severity: 'critical' });
     expect(prioridad).toBe('CRITICA');
+    
+    const prioridadMedia = PriorityRulesEngine.calcularPrioridad('P1', {});
+    expect(prioridadMedia).toBe('MEDIA');
   });
 });
