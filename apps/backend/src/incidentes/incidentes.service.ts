@@ -19,6 +19,7 @@ import { Sistema } from '../database/entities/sistema.entity';
 import { AsignarIncidenteDto } from './dto/asignar-incidente.dto';
 import { EventsGateway } from '../events/events.gateway';
 import { P6NotificacionesService } from '../p6-notificaciones/p6-notificaciones.service';
+import { PlaybooksService } from './playbooks.service';
 import { EventoAlerta } from '../database/entities/evento-alerta.entity';
 
 @Injectable()
@@ -48,6 +49,7 @@ export class IncidentesService {
     private readonly httpService: HttpService,
     private readonly p6NotificacionesService: P6NotificacionesService,
     private readonly configService: ConfigService,
+    private readonly playbooksService: PlaybooksService,
   ) {
     this.p9AnaliticaUrl = this.configService.get<string>(
       'P9_ANALITICA_URL',
@@ -686,5 +688,16 @@ export class IncidentesService {
     this.logger.log(
       `Comentario ${comentarioId} eliminado en incidente ${incidenteId} por usuario ${usuarioId}`,
     );
+  }
+  async obtenerPlaybook(id: string): Promise<string[]> {
+    const incidente = await this.incidenteRepository.findOne({
+      where: { id },
+    });
+
+    if (!incidente) {
+      throw new NotFoundException(`Incidente con ID ${id} no encontrado`);
+    }
+
+    return this.playbooksService.obtenerPlaybookParaIncidente(incidente);
   }
 }

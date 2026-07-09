@@ -169,6 +169,7 @@ export class WorkerService {
           creadorUsuarioId: this.sistemaAutomaticoUuid,
           politicaSlaId: politicaSla.id,
           fechaLimiteResolucion,
+          crmTicketId: normalizado.externalId,
         });
 
         const incidenteGuardado = await incidenteRepo.save(nuevoIncidente);

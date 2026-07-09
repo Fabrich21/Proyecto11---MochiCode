@@ -45,10 +45,13 @@ export function normalizeP07(dto: CreateAlertaDto): NormalizedAlerta {
     descripcion = `${descripcion}\n\n---\n(ID Interno: ${ticketId} | Agente: ${asignadoA})`;
   }
 
+  const externalId = ticket?.id_ticket_interno || ticket?.id || undefined;
+
   return {
     titulo,
     descripcion,
     prioridad,
     estadoSugerido,
+    externalId,
   };
 }

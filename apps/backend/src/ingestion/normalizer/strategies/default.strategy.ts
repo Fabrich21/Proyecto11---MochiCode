@@ -25,10 +25,14 @@ export function normalizeDefault(dto: CreateAlertaDto): NormalizedAlerta {
     prioridad = prioridadRaw as 'CRITICA' | 'ALTA' | 'MEDIA' | 'BAJA';
   }
 
+  // Soporte universal para extraer ID externo (ej: CRM)
+  const externalId = payload.ticket_asociado || payload.crm_ticket_id || payload.external_id || undefined;
+
   return {
     titulo,
     descripcion,
     prioridad,
     estadoSugerido: IncidenteEstado.ABIERTO,
+    externalId,
   };
 }
