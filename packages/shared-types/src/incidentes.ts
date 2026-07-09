@@ -45,14 +45,23 @@ export interface IGetIncidentesDto {
   q?: string;
 }
 
-export interface IP9EventoOperacionalCierre {
-  evento: 'Cierre';
-  incidente_id: string;
-  sistema_id: string;
-  estado_final: IncidenteEstado;
-  creado_en: string;
-  fecha_resolucion: string;
-  mttr_minutos: number;
-  sla_vencido: boolean;
-  prioridad: string;
+export type P9Severity = 'critical' | 'high' | 'medium' | 'low';
+export type P9Status = 'open' | 'investigating' | 'resolved';
+export type P9EventType = 'incident_created' | 'incident_status_changed' | 'incident_resolved';
+
+export interface IP9Payload {
+  incident_id: string;
+  title?: string;
+  severity: P9Severity;
+  status: P9Status;
+  opened_at?: string;
+  resolved_at?: string;
+  resolution_time_hours?: number;
+  sla_met?: boolean;
+}
+
+export interface IP9Envelope {
+  source: 'incidents';
+  event_type: P9EventType;
+  payload: IP9Payload;
 }

@@ -12,6 +12,7 @@ build/
 # Variables de Entorno (SEGURIDAD CRÍTICA)
 .env
 .env.local
+.env.example
 .env.production
 apps/backend/.env
 apps/frontend/.env.local

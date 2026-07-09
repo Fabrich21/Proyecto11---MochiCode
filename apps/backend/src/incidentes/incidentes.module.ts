@@ -9,6 +9,7 @@ import { PoliticaSla } from '../database/entities/politica-sla.entity';
 import { Sistema } from '../database/entities/sistema.entity';
 import { Comentario } from '../database/entities/comentario.entity';
 import { EventsModule } from '../events/events.module';
+import { P06ApiKeyGuard } from '../auth/guards/p06-api-key.guard';
 
 @Module({
   imports: [
@@ -23,6 +24,6 @@ import { EventsModule } from '../events/events.module';
     EventsModule,
   ],
   controllers: [IncidentesController],
-  providers: [IncidentesService],
+  providers: [IncidentesService, P06ApiKeyGuard],
 })
 export class IncidentesModule {}

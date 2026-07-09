@@ -42,7 +42,11 @@ async function fetchAllBackendIncidents(baseUrl: string, authHeader: string | nu
     });
 
     if (!res.ok) {
-      throw new Error(`backend_error_${res.status}`);
+      const detail = await res.text().catch(() => '');
+      const error = new Error(`backend_error_${res.status}`) as Error & { status?: number; detail?: string };
+      error.status = res.status;
+      error.detail = detail;
+      throw error;
     }
 
     const json = await res.json();
@@ -116,8 +120,24 @@ export async function GET(request: Request) {
       
       return NextResponse.json(items.map(mapBackendToFrontend));
     } catch (err) {
-      console.error('[GET /api/incidents] Error conectando al backend:', err);
-      return NextResponse.json({ error: 'connection_failed' }, { status: 502 });
+      const status = (err as { status?: number }).status;
+      const detail = (err as { detail?: string }).detail;
+      console.error('[GET /api/incidents] Error conectando al backend:', BACKEND_URL, status ?? '', detail ?? (err as Error).message);
+
+      // Si el backend respondio con un status (401/404/500...), lo propagamos
+      // para poder distinguir un error de autenticacion/ruta de una caida real.
+      if (status) {
+        return NextResponse.json(
+          { error: 'backend_error', status, detail },
+          { status },
+        );
+      }
+
+      // Sin status = no se pudo establecer conexion (backend caido, URL mala, DNS...).
+      return NextResponse.json(
+        { error: 'connection_failed', backendUrl: BACKEND_URL },
+        { status: 502 },
+      );
     }
   }
 

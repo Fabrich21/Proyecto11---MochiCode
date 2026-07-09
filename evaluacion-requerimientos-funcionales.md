@@ -1,15 +1,16 @@
 # Evaluacion de Requerimientos Funcionales - Grupo 11
 
 Fecha de evaluacion: 2026-07-06
+Actualizado: 2026-07-08 (comentarios, filtros avanzados y GET /incidentes/me)
 Fuente base: [coherencia.md](coherencia.md)
 
 ## Resumen Ejecutivo
 
 De los 68 requerimientos funcionales:
 
-- Implementados: 9
+- Implementados: 13
 - Parciales: 22
-- No implementados: 37
+- No implementados: 33
 
 ## Evidencia Tecnica Revisada
 
@@ -29,12 +30,16 @@ IDs implementados:
 - RF-11-03
 - RF-11-06
 - RF-11-16
+- RF-11-25
 - RF-11-27
+- RF-11-29
+- RF-11-34
 - RF-11-38
 - RF-11-39
 - RF-11-41
 - RF-11-66
 - RF-11-67
+- RF-11-68
 
 Evidencias clave:
 
@@ -43,6 +48,9 @@ Evidencias clave:
 - Escalamiento con notificacion a P6 por vencimiento SLA: [apps/backend/src/sla/sla.service.ts](apps/backend/src/sla/sla.service.ts)
 - Tiempo real al crear incidente: [apps/backend/src/events/events.gateway.ts](apps/backend/src/events/events.gateway.ts), [apps/backend/src/worker/worker.service.ts](apps/backend/src/worker/worker.service.ts)
 - Integraciones especificas P8/P4/P1: [apps/backend/src/ingestion/normalizer/strategies/p8-iot.strategy.ts](apps/backend/src/ingestion/normalizer/strategies/p8-iot.strategy.ts), [apps/backend/src/ingestion/normalizer/strategies/p4-pasarela.strategy.ts](apps/backend/src/ingestion/normalizer/strategies/p4-pasarela.strategy.ts), [apps/backend/src/ingestion/normalizer/strategies/p1-salud.strategy.ts](apps/backend/src/ingestion/normalizer/strategies/p1-salud.strategy.ts)
+- Comentarios de incidente (RF-11-34): entidad + migracion `CreateComentariosTable1780000000003` y endpoints POST/GET/DELETE `/incidentes/:id/comentarios` en [apps/backend/src/incidentes/incidentes.controller.ts](apps/backend/src/incidentes/incidentes.controller.ts)
+- Filtros avanzados y busqueda (RF-11-25, RF-11-68): `prioridad`, `asignado_a`, `fecha_desde`, `fecha_hasta` y texto `q` en [apps/backend/src/incidentes/dto/get-incidentes.dto.ts](apps/backend/src/incidentes/dto/get-incidentes.dto.ts) e implementados en `findAll()` de [apps/backend/src/incidentes/incidentes.service.ts](apps/backend/src/incidentes/incidentes.service.ts)
+- Incidentes asignados al usuario (RF-11-29): endpoint `GET /incidentes/me` en [apps/backend/src/incidentes/incidentes.controller.ts](apps/backend/src/incidentes/incidentes.controller.ts)
 - UI usable en desktop/movil: [apps/frontend/src/components/incident-dashboard.tsx](apps/frontend/src/components/incident-dashboard.tsx)
 
 ---
@@ -105,13 +113,10 @@ IDs no implementados:
 - RF-11-17
 - RF-11-18
 - RF-11-23
-- RF-11-25
 - RF-11-26
 - RF-11-28
-- RF-11-29
 - RF-11-30
 - RF-11-33
-- RF-11-34
 - RF-11-35
 - RF-11-36
 - RF-11-42
@@ -133,17 +138,16 @@ IDs no implementados:
 - RF-11-62
 - RF-11-63
 - RF-11-65
-- RF-11-68
 
 ### Hallazgos criticos
 
-- No existe endpoint de creacion manual de incidentes en backend. El controlador expone GET y PATCH de estado. Ver [apps/backend/src/incidentes/incidentes.controller.ts](apps/backend/src/incidentes/incidentes.controller.ts).
+- El controlador de incidentes ya expone creacion manual (`POST /incidentes`), listado con filtros (`GET /incidentes`), incidentes propios (`GET /incidentes/me`), cambio de estado (`PATCH /incidentes/:id/estado`), asignacion (`PATCH /incidentes/:id/asignar`) y comentarios (`POST/GET/DELETE /incidentes/:id/comentarios`). Falta aun el detalle individual (`GET /incidentes/:id`). Ver [apps/backend/src/incidentes/incidentes.controller.ts](apps/backend/src/incidentes/incidentes.controller.ts).
 - El ciclo de estados requerido no esta completo (faltan estados como Nuevo, Asignado, En Investigacion, En Resolucion, Resuelto, Reabierto). Ver [packages/shared-types/src/incidentes.ts](packages/shared-types/src/incidentes.ts).
 - No hay RBAC funcional ni integracion real con P12 para autorizacion de operaciones de negocio. Referencia: [apps/backend/src/incidentes/dto/update-estado-incidente.dto.ts](apps/backend/src/incidentes/dto/update-estado-incidente.dto.ts).
-- No hay comentarios/menciones, plantillas de comunicacion ni comunicaciones masivas.
+- Los comentarios de incidente ya estan implementados; aun faltan menciones, plantillas de comunicacion y comunicaciones masivas.
 - No hay reportes exportables (CSV/Excel/PDF) ni panel analitico de tendencias completo.
 - Playbooks/evidencias existen en modelo de datos, pero sin capa completa de servicios/controladores/UI para su gestion funcional.
-- La busqueda/filtro avanzado RF-11-68 no esta implementado de forma completa (solo texto y severidad en frontend; estado/sistema en backend).
+- La busqueda/filtro avanzado (RF-11-68) ya esta implementada en backend (estado, sistema, prioridad, asignado_a, rango de fechas y texto en titulo/descripcion); resta exponer estos filtros por completo en la UI.
 
 ---
 
