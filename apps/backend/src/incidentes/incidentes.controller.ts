@@ -9,14 +9,20 @@ import { ComentarioResponseDto } from './dto/comentario-response.dto';
 import {
   ApiBody,
   ApiCreatedResponse,
+  ApiBearerAuth,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
+  ApiQuery,
+  ApiSecurity,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { Public } from '../auth/decorators/public.decorator';
+import { P06ApiKeyGuard } from '../auth/guards/p06-api-key.guard';
 
 @ApiTags('Incidentes')
 @Controller('incidentes')
@@ -80,6 +86,79 @@ export class IncidentesController {
     return this.incidentesService.findAll(query);
   }
 
+  @Get('me')
+  @ApiOperation({ summary: 'Listar los incidentes asignados al usuario autenticado' })
+  @ApiOkResponse({
+    description: 'Listado paginado de incidentes asignados al usuario en sesion',
+    schema: {
+      example: {
+        data: [
+          {
+            id: '2f4c4b54-2164-4962-a98d-22f944098f92',
+            sistemaId: 'P08',
+            estado: 'EN_PROGRESO',
+            prioridad: 'ALTA',
+            asignadoAUsuarioId: 'f7b6d624-bcd8-4f44-b988-f1ce4f6fbb7d',
+            creadoEn: '2026-07-07T15:00:00.000Z',
+            fechaResolucion: null,
+          },
+        ],
+        meta: {
+          total_registros: 1,
+          pagina_actual: 1,
+          total_paginas: 1,
+          registros_por_pagina: 10,
+        },
+      },
+    },
+  })
+  findMisIncidentes(@Query() query: GetIncidentesDto, @Request() req: any) {
+    return this.incidentesService.findAll({
+      ...query,
+      asignado_a: req.user.userId,
+    });
+  }
+
+  @Get('estado-ticket/:id_ticket')
+  @Public()
+  @UseGuards(P06ApiKeyGuard)
+  @ApiOperation({ summary: 'Consultar estado de un ticket desde el sistema CRM externo' })
+  @ApiSecurity('x-api-key')
+  @ApiBearerAuth()
+  @ApiParam({ name: 'id_ticket', description: 'UUID del incidente/ticket' })
+  @ApiQuery({ name: 'api_key', required: true, description: 'API key de Incidentes entregada al CRM' })
+  @ApiOkResponse({
+    description: 'Estado obtenido desde el sistema externo CRM',
+    schema: {
+      example: {
+        ok: true,
+        ticket: {
+          id: '2f4c4b54-2164-4962-a98d-22f944098f92',
+          asunto: 'Caida de servicio de pagos',
+          estado: 'progreso',
+          prioridad: 'alta',
+          canal: 'email',
+          cliente_id: null,
+          cliente_nombre: null,
+          agente_id: '65a6c7d2-9dc8-4e53-b6b0-0f55bd7d5f6d',
+          fecha_vencimiento_sla: '2026-07-07T19:00:00.000Z',
+          pedido_id_ref: null,
+          suscripcion_id_ref: null,
+          pago_id_ref: null,
+          salud_ref: null,
+          resolucion: null,
+          creado_en: '2026-07-07T15:00:00.000Z',
+          actualizado_en: '2026-07-07T15:00:00.000Z',
+        },
+      },
+    },
+  })
+  @ApiNotFoundResponse({ description: 'Ticket no encontrado' })
+  @ApiUnauthorizedResponse({ description: 'api_key inválida o ausente' })
+  obtenerEstado(@Param('id_ticket') idTicket: string) {
+    return this.incidentesService.obtenerEstado(idTicket);
+  }
+
   @Patch(':id/estado')
   @ApiOperation({ summary: 'Cambiar estado de un incidente por ID' })
   @ApiParam({ name: 'id', description: 'UUID del incidente' })
@@ -108,6 +187,25 @@ export class IncidentesController {
   }
 
   @Patch(':id/asignar')
+  @ApiOperation({ summary: 'Asignar un responsable a un incidente por ID' })
+  @ApiParam({ name: 'id', description: 'UUID del incidente' })
+  @ApiBody({ type: AsignarIncidenteDto })
+  @ApiOkResponse({
+    description: 'Incidente asignado correctamente',
+    schema: {
+      example: {
+        id: '2f4c4b54-2164-4962-a98d-22f944098f92',
+        titulo: 'Caida de servicio de pagos',
+        sistemaId: 'P04',
+        estado: 'ABIERTO',
+        prioridad: 'ALTA',
+        asignadoAUsuarioId: '65a6c7d2-9dc8-4e53-b6b0-0f55bd7d5f6d',
+        creadoEn: '2026-07-07T15:00:00.000Z',
+        fechaResolucion: null,
+      },
+    },
+  })
+  @ApiNotFoundResponse({ description: 'Incidente no encontrado' })
   asignarIncidente(
     @Param('id') id: string,
     @Body() asignarIncidenteDto: AsignarIncidenteDto,

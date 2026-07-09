@@ -1,6 +1,6 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, In } from 'typeorm';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
@@ -20,11 +20,14 @@ import { AsignarIncidenteDto } from './dto/asignar-incidente.dto';
 import { EventsGateway } from '../events/events.gateway';
 import { P6NotificacionesService } from '../p6-notificaciones/p6-notificaciones.service';
 import { PlaybooksService } from './playbooks.service';
+import { EventoAlerta } from '../database/entities/evento-alerta.entity';
 
 @Injectable()
 export class IncidentesService {
   private readonly logger = new Logger(IncidentesService.name);
   private readonly p9AnaliticaUrl: string;
+  private readonly p7CrmEstadoUrl: string;
+  private readonly sistemaAutomaticoUuid: string;
 
   constructor(
     @InjectRepository(Incidente)
@@ -39,6 +42,8 @@ export class IncidentesService {
     private readonly sistemaRepository: Repository<Sistema>,
     @InjectRepository(Comentario)
     private readonly comentarioRepository: Repository<Comentario>,
+    @InjectRepository(EventoAlerta)
+    private readonly eventoAlertaRepository: Repository<EventoAlerta>,
     private readonly dataSource: DataSource,
     private readonly eventsGateway: EventsGateway,
     private readonly httpService: HttpService,
@@ -49,6 +54,16 @@ export class IncidentesService {
     this.p9AnaliticaUrl = this.configService.get<string>(
       'P9_ANALITICA_URL',
       'http://p9-analitica/v1/events',
+    )!;
+
+    this.p7CrmEstadoUrl = this.configService.get<string>(
+      'P7_CRM_ESTADO_URL',
+      'https://pgti-proyecto-crm-backend.vercel.app/api/v1/incidentes/estado-ticket',
+    )!;
+
+    this.sistemaAutomaticoUuid = this.configService.get<string>(
+      'SISTEMA_AUTOMATICO_UUID',
+      '00000000-0000-0000-0000-000000000001',
     )!;
   }
 
@@ -115,6 +130,149 @@ export class IncidentesService {
         registros_por_pagina: limit,
       },
     };
+  }
+
+  async obtenerEstado(id: string) {
+    const apiKey =
+      this.configService.get<string>('INCIDENTES_API_KEY') ??
+      this.configService.get<string>('API_KEY_P07');
+
+    if (!apiKey) {
+      this.logger.error('No existe INCIDENTES_API_KEY ni API_KEY_P07 para consultar CRM externo.');
+      throw new HttpException(
+        { ok: false, message: 'No se pudo consultar el sistema externo' },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+
+    const url = `${this.p7CrmEstadoUrl.replace(/\/$/, '')}/${encodeURIComponent(id)}`;
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(url, {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          params: {
+            api_key: apiKey,
+          },
+        }),
+      );
+
+      return response.data;
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const data = error?.response?.data;
+
+      if (status && data) {
+        throw new HttpException(data, status);
+      }
+
+      this.logger.error(`No se pudo consultar el estado del ticket ${id} en CRM externo`, error);
+      throw new HttpException(
+        { ok: false, message: 'No se pudo consultar el sistema externo' },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
+  }
+
+  /**
+   * Sincroniza el estado de los incidentes originados por CRM (P07) que siguen activos
+   * en P11: consulta el estado real en el sistema externo y lo persiste localmente si cambió.
+   *
+   * El id del incidente en P11 coincide con el id del ticket en CRM.
+   */
+  async sincronizarEstadosDesdeCrm(): Promise<{ revisados: number; actualizados: number }> {
+    const incidentesActivos = await this.incidenteRepository.find({
+      where: {
+        sistemaId: In(['P07', 'P7']),
+        estado: In([IncidenteEstado.ABIERTO, IncidenteEstado.EN_PROGRESO]),
+      },
+    });
+
+    let actualizados = 0;
+
+    for (const incidente of incidentesActivos) {
+      try {
+        const idTicketCrm = await this.resolverIdTicketCrm(incidente.id);
+
+        if (!idTicketCrm) {
+          this.logger.warn(
+            `No se encontró el id del ticket CRM para el incidente ${incidente.id}; se omite.`,
+          );
+          continue;
+        }
+
+        const respuesta: any = await this.obtenerEstado(idTicketCrm);
+        const estadoCrm = respuesta?.ticket?.estado;
+        const nuevoEstado = this.mapearEstadoCrmAIncidente(estadoCrm);
+
+        if (!nuevoEstado) {
+          this.logger.warn(
+            `Estado CRM desconocido ("${estadoCrm}") para incidente ${incidente.id}; se omite.`,
+          );
+          continue;
+        }
+
+        if (nuevoEstado === incidente.estado) {
+          continue;
+        }
+
+        await this.cambiarEstado(incidente.id, {
+          estado: nuevoEstado,
+          usuarioId: this.sistemaAutomaticoUuid,
+        });
+
+        actualizados += 1;
+        this.logger.log(
+          `Incidente ${incidente.id} sincronizado desde CRM (ticket ${idTicketCrm}): ${incidente.estado} → ${nuevoEstado}.`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `No se pudo sincronizar el estado del incidente ${incidente.id} desde CRM`,
+          error,
+        );
+      }
+    }
+
+    return { revisados: incidentesActivos.length, actualizados };
+  }
+
+  /**
+   * Resuelve el id del ticket en CRM asociado a un incidente de P11.
+   * El id llega en el payload de la alerta (id_ticket_interno / id) y queda
+   * almacenado en la tabla eventos_alerta.
+   */
+  private async resolverIdTicketCrm(incidenteId: string): Promise<string | null> {
+    const evento = await this.eventoAlertaRepository.findOne({
+      where: { incidenteId },
+      order: { creadoEn: 'DESC' },
+    });
+
+    const payload = (evento?.payload ?? {}) as Record<string, unknown>;
+    const posibleId =
+      payload.id_ticket_interno ?? payload.id_ticket ?? payload.ticket_id ?? payload.id;
+
+    return typeof posibleId === 'string' && posibleId.length > 0 ? posibleId : null;
+  }
+
+  private mapearEstadoCrmAIncidente(estadoCrm: unknown): IncidenteEstado | null {
+    if (typeof estadoCrm !== 'string') {
+      return null;
+    }
+
+    switch (estadoCrm.toLowerCase()) {
+      case 'abierto':
+        return IncidenteEstado.ABIERTO;
+      case 'progreso':
+      case 'en_progreso':
+        return IncidenteEstado.EN_PROGRESO;
+      case 'resuelto':
+      case 'cerrado':
+        return IncidenteEstado.CERRADO;
+      default:
+        return null;
+    }
   }
 
   async create(createDto: CreateIncidenteDto) {

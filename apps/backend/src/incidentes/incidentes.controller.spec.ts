@@ -2,6 +2,8 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { IncidentesController } from './incidentes.controller';
 import { IncidentesService } from './incidentes.service';
 import { IncidenteEstado } from '@proyecto/shared-types';
+import { P06ApiKeyGuard } from '../auth/guards/p06-api-key.guard';
+import { ConfigService } from '@nestjs/config';
 
 describe('IncidentesController', () => {
   let controller: IncidentesController;
@@ -11,6 +13,7 @@ describe('IncidentesController', () => {
   const mockIncidentesService = {
     create: jest.fn(),
     findAll: jest.fn(),
+    obtenerEstado: jest.fn(),
     cambiarEstado: jest.fn(),
   };
 
@@ -21,6 +24,14 @@ describe('IncidentesController', () => {
         {
           provide: IncidentesService,
           useValue: mockIncidentesService,
+        },
+        {
+          provide: P06ApiKeyGuard,
+          useValue: { canActivate: jest.fn().mockReturnValue(true) },
+        },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn() },
         },
       ],
     }).compile();
@@ -72,6 +83,25 @@ describe('IncidentesController', () => {
       const result = await controller.create(createDto);
 
       expect(service.create).toHaveBeenCalledWith(createDto);
+      expect(result).toEqual(mockResult);
+    });
+  });
+
+  describe('obtenerEstado', () => {
+    it('debería llamar al servicio para obtener el estado del incidente', async () => {
+      const mockResult = {
+        ok: true,
+        ticket: {
+          id: 'uuid-123',
+          estado: 'progreso',
+          prioridad: 'alta',
+        },
+      };
+      mockIncidentesService.obtenerEstado.mockResolvedValue(mockResult);
+
+      const result = await controller.obtenerEstado('uuid-123');
+
+      expect(service.obtenerEstado).toHaveBeenCalledWith('uuid-123');
       expect(result).toEqual(mockResult);
     });
   });

@@ -1,10 +1,11 @@
 'use client';
 
-import React from 'react';
-import { X, Check, Archive, Clock, Users, FileText, AlertTriangle } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { X, Check, Archive, Clock, Users, FileText, AlertTriangle, MessageSquare, Send } from 'lucide-react';
 import { Incident, IncidenteEstado, getIncidentStatusBadgeClassName, getIncidentStatusLabel, normalizeIncidentStatus } from './incident-types';
 import { cn } from '@/lib/utils';
 import { formatDate, formatNumberES } from '@/lib/format';
+import { useAuth } from '@/context/useAuth';
 
 interface Props {
   incident: Incident;
@@ -14,11 +15,17 @@ interface Props {
   onCloseIncident: (i: Incident) => void;
 }
 
-// Limpia la descripción si viene como JSON del backend
+interface Comentario {
+  id: string;
+  incidenteId: string;
+  usuarioId: string;
+  contenido: string;
+  creadoEn: string;
+}
+
 function cleanDescription(desc: string): string {
   if (!desc) return 'Sin descripción';
   try {
-    //extraer solo el título
     const jsonMatch = desc.match(/Payload original:\s*(\{[\s\S]*\})/);
     if (jsonMatch) {
       try {
@@ -28,7 +35,6 @@ function cleanDescription(desc: string): string {
         const prefix = desc.split('Payload original:')[0].trim();
         return [prefix, titulo, descripcion].filter(Boolean).join(' — ');
       } catch {
-        // Si no se puede parsear, quitar el bloque de payload
         return desc.split('Payload original:')[0].trim();
       }
     }
@@ -48,6 +54,63 @@ function getSeverityLabel(severity: string) {
 }
 
 export function IncidentDetailModal({ incident, onClose, onAcknowledge, onResolve, onCloseIncident }: Props) {
+  const keycloak = useAuth();
+  const [comentarios, setComentarios] = useState<Comentario[]>([]);
+  const [comentariosLoading, setComentariosLoading] = useState(true);
+  const [comentariosError, setComentariosError] = useState('');
+  const [nuevoComentario, setNuevoComentario] = useState('');
+  const [enviando, setEnviando] = useState(false);
+
+  const loadComentarios = useCallback(async () => {
+    setComentariosLoading(true);
+    setComentariosError('');
+    try {
+      const res = await fetch(`/api/incidents/${encodeURIComponent(incident.id)}/comentarios`, {
+        cache: 'no-store',
+        headers: { Authorization: `Bearer ${keycloak?.token || ''}` },
+      });
+      if (!res.ok) throw new Error('No se pudieron cargar los comentarios');
+      const data: unknown = await res.json();
+      setComentarios(Array.isArray(data) ? (data as Comentario[]) : []);
+    } catch (err) {
+      setComentariosError(err instanceof Error ? err.message : 'Error al cargar comentarios');
+    } finally {
+      setComentariosLoading(false);
+    }
+  }, [incident.id, keycloak?.token]);
+
+  useEffect(() => {
+    void loadComentarios();
+  }, [loadComentarios]);
+
+  async function handleEnviarComentario() {
+    const contenido = nuevoComentario.trim();
+    if (!contenido || enviando) return;
+    setEnviando(true);
+    setComentariosError('');
+    try {
+      const res = await fetch(`/api/incidents/${encodeURIComponent(incident.id)}/comentarios`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          Authorization: `Bearer ${keycloak?.token || ''}`,
+        },
+        body: JSON.stringify({ contenido }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || err.error || 'No se pudo agregar el comentario');
+      }
+      const creado: Comentario = await res.json();
+      setComentarios((prev) => [...prev, creado]);
+      setNuevoComentario('');
+    } catch (err) {
+      setComentariosError(err instanceof Error ? err.message : 'Error al enviar comentario');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
   const currentStatus = normalizeIncidentStatus(incident.incidentStatus);
   const isClosed = currentStatus === IncidenteEstado.CERRADO || !!incident.closedAt;
   const isResolved = !!incident.resolvedAt;
@@ -87,16 +150,9 @@ export function IncidentDetailModal({ incident, onClose, onAcknowledge, onResolv
             <div className="flex-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <p className="text-xs uppercase tracking-wide text-foreground/50">Detalle de incidente</p>
-                {isClosed && (
-                  <span className={cn('px-2 py-0.5 rounded-full text-xs font-bold border', statusClassName)}>
-                    {statusLabel}
-                  </span>
-                )}
-                {!isClosed && (
-                  <span className={cn('px-2 py-0.5 rounded-full text-xs font-bold border', statusClassName)}>
-                    {statusLabel}
-                  </span>
-                )}
+                <span className={cn('px-2 py-0.5 rounded-full text-xs font-bold border', statusClassName)}>
+                  {statusLabel}
+                </span>
               </div>
               <h3 id="incident-detail-title" className="mt-1 text-xl font-bold text-foreground">
                 {incident.title || incident.system || incident.id}
@@ -136,7 +192,6 @@ export function IncidentDetailModal({ incident, onClose, onAcknowledge, onResolv
             )}
           </div>
 
-          {/* Descripción limpia */}
           <div>
             <p className="text-sm font-semibold text-foreground/70">Descripción</p>
             <p className="mt-2 rounded-lg border border-border bg-secondary/10 p-4 text-sm leading-relaxed text-foreground">
@@ -152,26 +207,28 @@ export function IncidentDetailModal({ incident, onClose, onAcknowledge, onResolv
                   {isResolved ? 'Caso resuelto y cerrado correctamente.' : 'Caso cerrado correctamente.'}
                 </p>
                 <p className="mt-2 text-green-900/80">
-                  {incident.resolutionSummary || cleanDesc || 'No se registró una solución detallada en el incidente.'}
+                  {incident.resolutionSummary || cleanDesc || 'No se registró una solución detallada.'}
                 </p>
               </div>
             </div>
           )}
 
-          <div>
-            <p className="text-sm font-semibold text-foreground/70">Línea de tiempo</p>
-            <div className="mt-2 space-y-2">
-              {timeline.map((entry) => (
-                <div key={entry.label} className="flex items-start gap-3 rounded-lg border border-border bg-white px-4 py-3">
-                  <div className="mt-0.5 text-foreground/50">{entry.icon}</div>
-                  <div className="flex-1">
-                    <p className="text-sm font-medium text-foreground">{entry.label}</p>
-                    <p className="text-xs text-foreground/60">{formatDate(entry.value)}</p>
+          {timeline.length > 0 && (
+            <div>
+              <p className="text-sm font-semibold text-foreground/70">Línea de tiempo</p>
+              <div className="mt-2 space-y-2">
+                {timeline.map((entry) => (
+                  <div key={entry.label} className="flex items-start gap-3 rounded-lg border border-border bg-white px-4 py-3">
+                    <div className="mt-0.5 text-foreground/50">{entry.icon}</div>
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-foreground">{entry.label}</p>
+                      <p className="text-xs text-foreground/60">{formatDate(entry.value)}</p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
           {incident.alertPayload && (
             <div>
@@ -205,20 +262,79 @@ export function IncidentDetailModal({ incident, onClose, onAcknowledge, onResolv
           </div>
 
           {incident.slaTargetMinutes && (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <InfoBlock label="SLA minutos previstos" value={`${incident.slaTargetMinutes} min`} />
-            </div>
+            <InfoBlock label="SLA minutos previstos" value={`${incident.slaTargetMinutes} min`} />
           )}
+
+          {/* Comentarios */}
+          <div>
+            <div className="flex items-center gap-2 mb-2">
+              <MessageSquare className="h-4 w-4 text-foreground/60" />
+              <p className="text-sm font-semibold text-foreground/70">
+                Comentarios{comentarios.length > 0 ? ` (${comentarios.length})` : ''}
+              </p>
+            </div>
+
+            {comentariosError && (
+              <div className="mb-2 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+                {comentariosError}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              {comentariosLoading && (
+                <p className="text-sm text-foreground/50">Cargando comentarios...</p>
+              )}
+              {!comentariosLoading && comentarios.length === 0 && (
+                <p className="rounded-lg border border-border bg-secondary/10 px-4 py-3 text-sm text-foreground/60">
+                  Aún no hay comentarios en este incidente.
+                </p>
+              )}
+              {!comentariosLoading && comentarios.map((c) => (
+                <div key={c.id} className="rounded-lg border border-border bg-white px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-xs font-semibold text-foreground/80">{c.usuarioId}</span>
+                    <span className="text-xs text-foreground/50">{formatDate(c.creadoEn)}</span>
+                  </div>
+                  <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground">{c.contenido}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-3 flex items-end gap-2">
+              <textarea
+                value={nuevoComentario}
+                onChange={(e) => setNuevoComentario(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    void handleEnviarComentario();
+                  }
+                }}
+                placeholder="Escribe un comentario... (Ctrl+Enter para enviar)"
+                rows={2}
+                maxLength={2000}
+                className="w-full resize-none rounded-lg border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#3C6E71]/40"
+              />
+              <button
+                type="button"
+                onClick={() => void handleEnviarComentario()}
+                disabled={enviando || !nuevoComentario.trim()}
+                className="inline-flex items-center gap-2 rounded-md bg-[#3C6E71] px-3 py-2 text-sm font-medium text-white transition hover:bg-[#2d5558] disabled:opacity-50"
+              >
+                <Send className="h-4 w-4" /> {enviando ? 'Enviando...' : 'Enviar'}
+              </button>
+            </div>
+          </div>
         </div>
 
-        <footer className="flex items-center justify-end gap-3 border-t border-border px-6 py-4">
+        <footer className="flex items-center justify-end gap-3 border-t border-border px-6 py-4 flex-wrap">
           {!isClosed && (
             <>
               <button
                 type="button"
                 onClick={() => onAcknowledge(incident)}
                 disabled={isAcknowledged}
-                className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium transition disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium transition disabled:opacity-50 hover:bg-secondary/20"
               >
                 <Check className="h-4 w-4" /> Reconocer
               </button>
@@ -227,7 +343,7 @@ export function IncidentDetailModal({ incident, onClose, onAcknowledge, onResolv
                 type="button"
                 onClick={() => onResolve(incident)}
                 disabled={isResolved}
-                className="inline-flex items-center gap-2 rounded-md border border-border bg-emerald-50 px-3 py-2 text-sm font-medium transition disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-md border border-border bg-emerald-50 px-3 py-2 text-sm font-medium transition disabled:opacity-50 hover:bg-emerald-100"
               >
                 <Check className="h-4 w-4" /> Marcar resuelto
               </button>
@@ -235,7 +351,7 @@ export function IncidentDetailModal({ incident, onClose, onAcknowledge, onResolv
               <button
                 type="button"
                 onClick={() => onCloseIncident(incident)}
-                className="inline-flex items-center gap-2 rounded-md border border-border bg-destructive/10 px-3 py-2 text-sm font-medium transition text-red-700"
+                className="inline-flex items-center gap-2 rounded-md border border-border bg-destructive/10 px-3 py-2 text-sm font-medium transition text-red-700 hover:bg-destructive/20"
               >
                 <Archive className="h-4 w-4" /> Cerrar incidente
               </button>

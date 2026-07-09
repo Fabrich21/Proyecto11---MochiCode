@@ -10,6 +10,9 @@ import { Sistema } from '../database/entities/sistema.entity';
 import { Comentario } from '../database/entities/comentario.entity';
 import { EventsModule } from '../events/events.module';
 import { PlaybooksService } from './playbooks.service';
+import { P06ApiKeyGuard } from '../auth/guards/p06-api-key.guard';
+import { IncidentesScheduler } from './incidentes.scheduler';
+import { EventoAlerta } from '../database/entities/evento-alerta.entity';
 
 @Module({
   imports: [
@@ -20,10 +23,11 @@ import { PlaybooksService } from './playbooks.service';
       PoliticaSla,
       Sistema,
       Comentario,
+      EventoAlerta,
     ]),
     EventsModule,
   ],
   controllers: [IncidentesController],
-  providers: [IncidentesService, PlaybooksService],
+  providers: [IncidentesService, PlaybooksService, P06ApiKeyGuard, IncidentesScheduler],
 })
 export class IncidentesModule {}

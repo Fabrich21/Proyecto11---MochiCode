@@ -13,6 +13,7 @@ import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { P6NotificacionesService } from '../p6-notificaciones/p6-notificaciones.service';
 import { NotFoundException } from '@nestjs/common';
+import { EventoAlerta } from '../database/entities/evento-alerta.entity';
 
 describe('IncidentesService - Comentarios', () => {
   let service: IncidentesService;
@@ -57,6 +58,10 @@ describe('IncidentesService - Comentarios', () => {
         },
         {
           provide: getRepositoryToken(Sistema),
+          useValue: { findOne: jest.fn() },
+        },
+        {
+          provide: getRepositoryToken(EventoAlerta),
           useValue: { findOne: jest.fn() },
         },
         {
