@@ -30,6 +30,7 @@ describe('IncidentesService', () => {
 
   const mockIncidenteRepository = {
     createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
+    findOne: jest.fn(),
   };
 
   const mockHistorialRepository = {};
@@ -221,6 +222,61 @@ describe('IncidentesService', () => {
       await service.findAll({});
 
       expect(mockQueryBuilder.andWhere).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('obtenerEstado', () => {
+    it('debería devolver el estado resumido del incidente', async () => {
+      const mockIncidente = {
+        id: 'inc-estado-1',
+        titulo: 'Caída de servicio',
+        sistemaId: 'P04',
+        estado: IncidenteEstado.EN_PROGRESO,
+        prioridad: 'ALTA',
+        asignadoAUsuarioId: 'user-1',
+        slaVencido: false,
+        fechaLimiteResolucion: new Date('2026-07-08T20:00:00.000Z'),
+        fechaResolucion: null,
+        descripcion: 'Descripción del incidente',
+        creadoEn: new Date('2026-07-08T16:00:00.000Z'),
+      };
+      mockIncidenteRepository.findOne.mockResolvedValue(mockIncidente);
+
+      const result = await service.obtenerEstado('inc-estado-1');
+
+      expect(mockIncidenteRepository.findOne).toHaveBeenCalledWith({
+        where: { id: 'inc-estado-1' },
+      });
+      expect(result).toEqual({
+        ok: true,
+        ticket: {
+          id: 'inc-estado-1',
+          asunto: 'Caída de servicio',
+          estado: 'progreso',
+          prioridad: 'alta',
+          canal: 'email',
+          cliente_id: null,
+          cliente_nombre: null,
+          agente_id: 'user-1',
+          fecha_vencimiento_sla: '2026-07-08T20:00:00.000Z',
+          pedido_id_ref: null,
+          suscripcion_id_ref: null,
+          pago_id_ref: null,
+          salud_ref: null,
+          resolucion: null,
+          creado_en: '2026-07-08T16:00:00.000Z',
+          actualizado_en: '2026-07-08T16:00:00.000Z',
+        },
+      });
+    });
+
+    it('debería lanzar NotFoundException si el incidente no existe', async () => {
+      mockIncidenteRepository.findOne.mockResolvedValue(null);
+
+      await expect(service.obtenerEstado('no-existe')).rejects.toMatchObject({
+        response: { ok: false, message: 'Ticket no encontrado' },
+        status: 404,
+      });
     });
   });
 
