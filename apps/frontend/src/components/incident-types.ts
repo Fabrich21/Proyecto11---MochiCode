@@ -1,3 +1,4 @@
+
 export enum IncidenteEstado {
   ABIERTO = 'ABIERTO',
   ASIGNADO = 'ASIGNADO',
@@ -92,6 +93,34 @@ export function getIncidentStatusBadgeClassName(status?: string | IncidentStatus
   return INCIDENT_STATUS_CLASSES[normalized] ?? INCIDENT_STATUS_CLASSES[IncidenteEstado.ABIERTO];
 }
 
+export interface PostMortemAction {
+  id: string;
+  descripcion: string;
+  responsable: string;
+  fechaLimite: Date | string;
+  estado: 'PENDIENTE' | 'EN_PROGRESO' | 'COMPLETADO';
+}
+
+export interface PostMortem {
+  id: string;
+  incidentId: string;
+  titulo: string;
+  causaRaiz: string;
+  descripcion: string;
+  duracionMinutos: number;
+  usuariosAfectados: number;
+  sistemasAfectados: string[];
+  aciertos: string[];
+  errores: string[];
+  lecciones: string[];
+  acciones: PostMortemAction[];
+  estado: 'BORRADOR' | 'EN_REVISION' | 'APROBADO' | 'PUBLICADO';
+  creadoPor: string;
+  creadoEn: Date | string;
+  aprobadoPor?: string;
+  aprobadoEn?: Date | string;
+}
+
 export interface Incident {
   id: string;
   externalId?: string;
@@ -117,6 +146,8 @@ export interface Incident {
   alertPayload?: Record<string, unknown> | string | null;
   events?: IncidentEventEntry[];
   eventType?: 'created' | 'resolved' | 'updated';
+  postMortemId?: string;
+  postMortem?: PostMortem;
 }
 
 export interface IncidentUpdate {

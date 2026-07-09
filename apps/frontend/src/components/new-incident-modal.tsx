@@ -29,7 +29,6 @@ const PRIORIDADES = [
   { id: 'CRITICA', label: 'Crítica' },
   { id: 'ALTA', label: 'Alta' },
   { id: 'MEDIA', label: 'Media' },
-  { id: 'BAJA', label: 'Baja' },
 ];
 
 export function NewIncidentModal({ onClose, onCreated }: Props) {
