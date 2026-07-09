@@ -10,6 +10,7 @@ import { Sistema } from '../database/entities/sistema.entity';
 import { Comentario } from '../database/entities/comentario.entity';
 import { EventsModule } from '../events/events.module';
 import { P06ApiKeyGuard } from '../auth/guards/p06-api-key.guard';
+import { IncidentesScheduler } from './incidentes.scheduler';
 
 @Module({
   imports: [
@@ -24,6 +25,6 @@ import { P06ApiKeyGuard } from '../auth/guards/p06-api-key.guard';
     EventsModule,
   ],
   controllers: [IncidentesController],
-  providers: [IncidentesService, P06ApiKeyGuard],
+  providers: [IncidentesService, P06ApiKeyGuard, IncidentesScheduler],
 })
 export class IncidentesModule {}

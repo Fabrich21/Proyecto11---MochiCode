@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository, DataSource, In } from 'typeorm';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom } from 'rxjs';
@@ -24,6 +24,8 @@ import { P6NotificacionesService } from '../p6-notificaciones/p6-notificaciones.
 export class IncidentesService {
   private readonly logger = new Logger(IncidentesService.name);
   private readonly p9AnaliticaUrl: string;
+  private readonly p7CrmEstadoUrl: string;
+  private readonly sistemaAutomaticoUuid: string;
 
   constructor(
     @InjectRepository(Incidente)
@@ -47,6 +49,16 @@ export class IncidentesService {
     this.p9AnaliticaUrl = this.configService.get<string>(
       'P9_ANALITICA_URL',
       'http://p9-analitica/api/v1/ingesta/eventos-operacionales',
+    )!;
+
+    this.p7CrmEstadoUrl = this.configService.get<string>(
+      'P7_CRM_ESTADO_URL',
+      'https://pgti-proyecto-crm-backend.vercel.app/api/v1/incidentes/estado-ticket',
+    )!;
+
+    this.sistemaAutomaticoUuid = this.configService.get<string>(
+      'SISTEMA_AUTOMATICO_UUID',
+      '00000000-0000-0000-0000-000000000001',
     )!;
   }
 
@@ -116,50 +128,118 @@ export class IncidentesService {
   }
 
   async obtenerEstado(id: string) {
-    const incidente = await this.incidenteRepository.findOne({
-      where: { id },
-    });
+    const apiKey =
+      this.configService.get<string>('INCIDENTES_API_KEY') ??
+      this.configService.get<string>('API_KEY_P07');
 
-    if (!incidente) {
+    if (!apiKey) {
+      this.logger.error('No existe INCIDENTES_API_KEY ni API_KEY_P07 para consultar CRM externo.');
       throw new HttpException(
-        { ok: false, message: 'Ticket no encontrado' },
-        HttpStatus.NOT_FOUND,
+        { ok: false, message: 'No se pudo consultar el sistema externo' },
+        HttpStatus.BAD_GATEWAY,
       );
     }
 
-    return {
-      ok: true,
-      ticket: {
-        id: incidente.id,
-        asunto: incidente.titulo,
-        estado: this.mapearEstadoTicket(incidente.estado),
-        prioridad: incidente.prioridad.toLowerCase(),
-        canal: 'email',
-        cliente_id: null,
-        cliente_nombre: null,
-        agente_id: incidente.asignadoAUsuarioId ?? null,
-        fecha_vencimiento_sla: incidente.fechaLimiteResolucion?.toISOString() ?? null,
-        pedido_id_ref: null,
-        suscripcion_id_ref: null,
-        pago_id_ref: null,
-        salud_ref: null,
-        resolucion: incidente.fechaResolucion ? incidente.descripcion ?? null : null,
-        creado_en: incidente.creadoEn.toISOString(),
-        actualizado_en: (incidente.fechaResolucion ?? incidente.creadoEn).toISOString(),
-      },
-    };
+    const url = `${this.p7CrmEstadoUrl.replace(/\/$/, '')}/${encodeURIComponent(id)}`;
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(url, {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          params: {
+            api_key: apiKey,
+          },
+        }),
+      );
+
+      return response.data;
+    } catch (error: any) {
+      const status = error?.response?.status;
+      const data = error?.response?.data;
+
+      if (status && data) {
+        throw new HttpException(data, status);
+      }
+
+      this.logger.error(`No se pudo consultar el estado del ticket ${id} en CRM externo`, error);
+      throw new HttpException(
+        { ok: false, message: 'No se pudo consultar el sistema externo' },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
   }
 
-  private mapearEstadoTicket(estado: IncidenteEstado): string {
-    switch (estado) {
-      case IncidenteEstado.ABIERTO:
-        return 'abierto';
-      case IncidenteEstado.EN_PROGRESO:
-        return 'progreso';
-      case IncidenteEstado.CERRADO:
-        return 'cerrado';
+  /**
+   * Sincroniza el estado de los incidentes originados por CRM (P07) que siguen activos
+   * en P11: consulta el estado real en el sistema externo y lo persiste localmente si cambió.
+   *
+   * El id del incidente en P11 coincide con el id del ticket en CRM.
+   */
+  async sincronizarEstadosDesdeCrm(): Promise<{ revisados: number; actualizados: number }> {
+    const incidentesActivos = await this.incidenteRepository.find({
+      where: {
+        sistemaId: In(['P07', 'P7']),
+        estado: In([IncidenteEstado.ABIERTO, IncidenteEstado.EN_PROGRESO]),
+      },
+    });
+
+    let actualizados = 0;
+
+    for (const incidente of incidentesActivos) {
+      try {
+        const respuesta: any = await this.obtenerEstado(incidente.id);
+        const estadoCrm = respuesta?.ticket?.estado;
+        const nuevoEstado = this.mapearEstadoCrmAIncidente(estadoCrm);
+
+        if (!nuevoEstado) {
+          this.logger.warn(
+            `Estado CRM desconocido ("${estadoCrm}") para incidente ${incidente.id}; se omite.`,
+          );
+          continue;
+        }
+
+        if (nuevoEstado === incidente.estado) {
+          continue;
+        }
+
+        await this.cambiarEstado(incidente.id, {
+          estado: nuevoEstado,
+          usuarioId: this.sistemaAutomaticoUuid,
+        });
+
+        actualizados += 1;
+        this.logger.log(
+          `Incidente ${incidente.id} sincronizado desde CRM: ${incidente.estado} → ${nuevoEstado}.`,
+        );
+      } catch (error) {
+        this.logger.error(
+          `No se pudo sincronizar el estado del incidente ${incidente.id} desde CRM`,
+          error,
+        );
+      }
+    }
+
+    return { revisados: incidentesActivos.length, actualizados };
+  }
+
+  private mapearEstadoCrmAIncidente(estadoCrm: unknown): IncidenteEstado | null {
+    if (typeof estadoCrm !== 'string') {
+      return null;
+    }
+
+    switch (estadoCrm.toLowerCase()) {
+      case 'abierto':
+        return IncidenteEstado.ABIERTO;
+      case 'progreso':
+      case 'en_progreso':
+        return IncidenteEstado.EN_PROGRESO;
+      case 'resuelto':
+      case 'cerrado':
+        return IncidenteEstado.CERRADO;
       default:
-        return String(estado).toLowerCase();
+        return null;
     }
   }
 

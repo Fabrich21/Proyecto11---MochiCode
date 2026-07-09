@@ -122,13 +122,13 @@ export class IncidentesController {
   @Get('estado-ticket/:id_ticket')
   @Public()
   @UseGuards(P06ApiKeyGuard)
-  @ApiOperation({ summary: 'Consultar estado de un ticket para integraciones externas' })
+  @ApiOperation({ summary: 'Consultar estado de un ticket desde el sistema CRM externo' })
   @ApiSecurity('x-api-key')
   @ApiBearerAuth()
   @ApiParam({ name: 'id_ticket', description: 'UUID del incidente/ticket' })
   @ApiQuery({ name: 'api_key', required: true, description: 'API key de Incidentes entregada al CRM' })
   @ApiOkResponse({
-    description: 'Estado actual del ticket en formato de integración externa',
+    description: 'Estado obtenido desde el sistema externo CRM',
     schema: {
       example: {
         ok: true,
