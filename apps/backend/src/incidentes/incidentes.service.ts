@@ -1,36 +1,24 @@
-import { Injectable, NotFoundException, Logger, HttpException, HttpStatus } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, In } from 'typeorm';
-import { HttpService } from '@nestjs/axios';
-import { ConfigService } from '@nestjs/config';
-import { firstValueFrom } from 'rxjs';
 import { Incidente } from '../database/entities/incidente.entity';
-import { IncidenteEstado, IP9Envelope, IP9Payload, P9EventType, P9Severity, P9Status } from '@proyecto/shared-types';
+import { IncidenteEstado } from '@proyecto/shared-types';
 import { HistorialEstado } from '../database/entities/historial-estado.entity';
 import { Auditoria } from '../database/entities/auditoria.entity';
-import { Comentario } from '../database/entities/comentario.entity';
 import { GetIncidentesDto } from './dto/get-incidentes.dto';
 import { UpdateEstadoIncidenteDto } from './dto/update-estado-incidente.dto';
-import { CreateComentarioDto } from './dto/create-comentario.dto';
 import { PoliticaSla } from '../database/entities/politica-sla.entity';
 import { SlaUtil } from '../common/utils/sla.util';
 import { CreateIncidenteDto } from './dto/create-incidente.dto';
 import { Sistema } from '../database/entities/sistema.entity';
 import { AsignarIncidenteDto } from './dto/asignar-incidente.dto';
 import { EventsGateway } from '../events/events.gateway';
-import { P6NotificacionesService } from '../p6-notificaciones/p6-notificaciones.service';
 import { PlaybooksService } from './playbooks.service';
-import { EventoAlerta } from '../database/entities/evento-alerta.entity';
+import { IncidentesNotificationService } from './incidentes-notification.service';
 
 @Injectable()
 export class IncidentesService {
-  /** Máximo de consultas simultáneas al CRM durante la sincronización de estados. */
-  private static readonly CONCURRENCIA_SYNC_CRM = 10;
-
   private readonly logger = new Logger(IncidentesService.name);
-  private readonly p9AnaliticaUrl: string;
-  private readonly p7CrmEstadoUrl: string;
-  private readonly sistemaAutomaticoUuid: string;
 
   constructor(
     @InjectRepository(Incidente)
@@ -43,32 +31,11 @@ export class IncidentesService {
     private readonly politicaSlaRepository: Repository<PoliticaSla>,
     @InjectRepository(Sistema)
     private readonly sistemaRepository: Repository<Sistema>,
-    @InjectRepository(Comentario)
-    private readonly comentarioRepository: Repository<Comentario>,
-    @InjectRepository(EventoAlerta)
-    private readonly eventoAlertaRepository: Repository<EventoAlerta>,
     private readonly dataSource: DataSource,
     private readonly eventsGateway: EventsGateway,
-    private readonly httpService: HttpService,
-    private readonly p6NotificacionesService: P6NotificacionesService,
-    private readonly configService: ConfigService,
     private readonly playbooksService: PlaybooksService,
-  ) {
-    this.p9AnaliticaUrl = this.configService.get<string>(
-      'P9_ANALITICA_URL',
-      'http://p9-analitica/v1/events',
-    )!;
-
-    this.p7CrmEstadoUrl = this.configService.get<string>(
-      'P7_CRM_ESTADO_URL',
-      'https://pgti-proyecto-crm-backend.vercel.app/api/v1/incidentes/estado-ticket',
-    )!;
-
-    this.sistemaAutomaticoUuid = this.configService.get<string>(
-      'SISTEMA_AUTOMATICO_UUID',
-      '00000000-0000-0000-0000-000000000001',
-    )!;
-  }
+    private readonly incidentesNotificationService: IncidentesNotificationService,
+  ) {}
 
   async findAll(query: GetIncidentesDto) {
     const {
@@ -135,198 +102,6 @@ export class IncidentesService {
     };
   }
 
-  async obtenerEstado(id: string) {
-    const apiKey =
-      this.configService.get<string>('INCIDENTES_API_KEY') ??
-      this.configService.get<string>('API_KEY_P07');
-
-    if (!apiKey) {
-      this.logger.error('No existe INCIDENTES_API_KEY ni API_KEY_P07 para consultar CRM externo.');
-      throw new HttpException(
-        { ok: false, message: 'No se pudo consultar el sistema externo' },
-        HttpStatus.BAD_GATEWAY,
-      );
-    }
-
-    const url = `${this.p7CrmEstadoUrl.replace(/\/$/, '')}/${encodeURIComponent(id)}`;
-
-    try {
-      const response = await firstValueFrom(
-        this.httpService.get(url, {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          params: {
-            api_key: apiKey,
-          },
-        }),
-      );
-
-      return response.data;
-    } catch (error: any) {
-      const status = error?.response?.status;
-      const data = error?.response?.data;
-
-      if (status && data) {
-        throw new HttpException(data, status);
-      }
-
-      this.logger.error(`No se pudo consultar el estado del ticket ${id} en CRM externo`, error);
-      throw new HttpException(
-        { ok: false, message: 'No se pudo consultar el sistema externo' },
-        HttpStatus.BAD_GATEWAY,
-      );
-    }
-  }
-
-  /**
-   * Sincroniza el estado de los incidentes originados por CRM (P07) que siguen activos
-   * en P11: consulta el estado real en el sistema externo y lo persiste localmente si cambió.
-   *
-   * El id del incidente en P11 coincide con el id del ticket en CRM.
-   */
-  async sincronizarEstadosDesdeCrm(): Promise<{ revisados: number; actualizados: number }> {
-    const incidentesActivos = await this.incidenteRepository.find({
-      where: {
-        sistemaId: In(['P07', 'P7']),
-        estado: In([IncidenteEstado.ABIERTO, IncidenteEstado.EN_PROGRESO]),
-      },
-    });
-
-    // Se procesan las consultas al CRM en paralelo con un límite de concurrencia
-    // para evitar el problema N+1 (peticiones HTTP secuenciales) sin saturar el
-    // sistema externo con cientos de peticiones simultáneas.
-    const resultados = await this.ejecutarConLimiteConcurrencia(
-      incidentesActivos,
-      IncidentesService.CONCURRENCIA_SYNC_CRM,
-      (incidente) => this.sincronizarIncidenteDesdeCrm(incidente),
-    );
-
-    const actualizados = resultados.reduce(
-      (total, resultado) =>
-        resultado.status === 'fulfilled' && resultado.value ? total + 1 : total,
-      0,
-    );
-
-    return { revisados: incidentesActivos.length, actualizados };
-  }
-
-  /**
-   * Sincroniza un único incidente contra el CRM externo.
-   * Devuelve `true` si el estado local cambió, `false` en caso contrario.
-   */
-  private async sincronizarIncidenteDesdeCrm(incidente: Incidente): Promise<boolean> {
-    const idTicketCrm = await this.resolverIdTicketCrm(incidente.id);
-
-    if (!idTicketCrm) {
-      this.logger.warn(
-        `No se encontró el id del ticket CRM para el incidente ${incidente.id}; se omite.`,
-      );
-      return false;
-    }
-
-    const respuesta: any = await this.obtenerEstado(idTicketCrm);
-    const estadoCrm = respuesta?.ticket?.estado;
-    const nuevoEstado = this.mapearEstadoCrmAIncidente(estadoCrm);
-
-    if (!nuevoEstado) {
-      this.logger.warn(
-        `Estado CRM desconocido ("${estadoCrm}") para incidente ${incidente.id}; se omite.`,
-      );
-      return false;
-    }
-
-    if (nuevoEstado === incidente.estado) {
-      return false;
-    }
-
-    await this.cambiarEstado(incidente.id, {
-      estado: nuevoEstado,
-      usuarioId: this.sistemaAutomaticoUuid,
-    });
-
-    this.logger.log(
-      `Incidente ${incidente.id} sincronizado desde CRM (ticket ${idTicketCrm}): ${incidente.estado} → ${nuevoEstado}.`,
-    );
-
-    return true;
-  }
-
-  /**
-   * Ejecuta una tarea asíncrona sobre una colección respetando un límite máximo de
-   * operaciones en curso, devolviendo el resultado de cada una vía `Promise.allSettled`.
-   * Los errores individuales se registran y no interrumpen al resto del lote.
-   */
-  private async ejecutarConLimiteConcurrencia<T, R>(
-    elementos: readonly T[],
-    limite: number,
-    tarea: (elemento: T) => Promise<R>,
-  ): Promise<PromiseSettledResult<R>[]> {
-    const resultados: PromiseSettledResult<R>[] = new Array(elementos.length);
-    const concurrencia = Math.max(1, Math.min(limite, elementos.length));
-    let siguiente = 0;
-
-    const worker = async (): Promise<void> => {
-      while (true) {
-        const indice = siguiente++;
-        if (indice >= elementos.length) {
-          return;
-        }
-
-        try {
-          resultados[indice] = { status: 'fulfilled', value: await tarea(elementos[indice]) };
-        } catch (error) {
-          this.logger.error(
-            `Error al procesar el elemento ${indice} en tarea concurrente`,
-            error,
-          );
-          resultados[indice] = { status: 'rejected', reason: error };
-        }
-      }
-    };
-
-    await Promise.allSettled(Array.from({ length: concurrencia }, () => worker()));
-
-    return resultados;
-  }
-
-  /**
-   * Resuelve el id del ticket en CRM asociado a un incidente de P11.
-   * El id llega en el payload de la alerta (id_ticket_interno / id) y queda
-   * almacenado en la tabla eventos_alerta.
-   */
-  private async resolverIdTicketCrm(incidenteId: string): Promise<string | null> {
-    const evento = await this.eventoAlertaRepository.findOne({
-      where: { incidenteId },
-      order: { creadoEn: 'DESC' },
-    });
-
-    const payload = (evento?.payload ?? {}) as Record<string, unknown>;
-    const posibleId =
-      payload.id_ticket_interno ?? payload.id_ticket ?? payload.ticket_id ?? payload.id;
-
-    return typeof posibleId === 'string' && posibleId.length > 0 ? posibleId : null;
-  }
-
-  private mapearEstadoCrmAIncidente(estadoCrm: unknown): IncidenteEstado | null {
-    if (typeof estadoCrm !== 'string') {
-      return null;
-    }
-
-    switch (estadoCrm.toLowerCase()) {
-      case 'abierto':
-        return IncidenteEstado.ABIERTO;
-      case 'progreso':
-      case 'en_progreso':
-        return IncidenteEstado.EN_PROGRESO;
-      case 'resuelto':
-      case 'cerrado':
-        return IncidenteEstado.CERRADO;
-      default:
-        return null;
-    }
-  }
-
   async create(createDto: CreateIncidenteDto) {
     const sistema = await this.sistemaRepository.findOne({
       where: { sistemaId: createDto.sistemaId },
@@ -383,8 +158,7 @@ export class IncidentesService {
 
       await queryRunner.commitTransaction();
       
-      // Notificar a Analítica (P9) la creación del incidente de forma asíncrona (no bloqueante)
-      this.notificarEventoAP9(incidenteGuardado, createDto.creadorUsuarioId, 'incident_created').catch(err => {
+      this.incidentesNotificationService.notificarEventoAP9(incidenteGuardado, createDto.creadorUsuarioId, 'incident_created').catch(err => {
         this.logger.error(`Error al notificar creación a P9 en background`, err);
       });
 
@@ -397,7 +171,13 @@ export class IncidentesService {
     }
   }
 
-  async cambiarEstado(id: string, updateDto: UpdateEstadoIncidenteDto) {
+  async cambiarEstado(id: string, updateDto: UpdateEstadoIncidenteDto, usuarioId?: string) {
+    const actorId = updateDto.usuarioId || usuarioId;
+    
+    if (!actorId) {
+       throw new Error('Usuario ID es requerido para cambiar estado');
+    }
+
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -428,7 +208,7 @@ export class IncidentesService {
       historial.incidenteId = incidente.id;
       historial.estadoAnterior = estadoAnterior;
       historial.estadoNuevo = updateDto.estado;
-      historial.cambiadoPorUsuarioId = updateDto.usuarioId!;
+      historial.cambiadoPorUsuarioId = actorId;
 
       await queryRunner.manager.save(historial);
 
@@ -436,27 +216,16 @@ export class IncidentesService {
 
       this.eventsGateway.emitEstadoActualizado(incidente.id, updateDto.estado);
 
-      const p9EventType: P9EventType = updateDto.estado === IncidenteEstado.CERRADO ? 'incident_resolved' : 'incident_status_changed';
+      const p9EventType = updateDto.estado === IncidenteEstado.CERRADO ? 'incident_resolved' : 'incident_status_changed';
       
-      // Notificar a Analítica (P9) el cambio de estado (no bloqueante para no afectar SLA del response)
-      this.notificarEventoAP9(incidenteActualizado, updateDto.usuarioId!, p9EventType).catch(err => {
+      this.incidentesNotificationService.notificarEventoAP9(incidenteActualizado, actorId, p9EventType).catch(err => {
         this.logger.error(`Error al notificar cambio de estado a P9 en background`, err);
       });
 
       if (updateDto.estado === IncidenteEstado.CERRADO) {
-        const emailDefault = this.configService.get<string>('P6_DEFAULT_EMAIL');
-        if (emailDefault) {
-          try {
-            await this.p6NotificacionesService.enviarEmailResolucionTicket({
-              email: emailDefault,
-              incidenteId: incidente.id,
-              titulo: incidente.titulo,
-              fechaResolucion: incidenteActualizado.fechaResolucion?.toISOString() ?? new Date().toISOString()
-            });
-          } catch (error) {
-            this.logger.error(`No se pudo enviar email P6 al cerrar incidente ${incidente.id}`, error);
-          }
-        }
+        this.incidentesNotificationService.notificarResolucion(incidente).catch(err => {
+            this.logger.error(`Error al notificar resolución en background`, err);
+        });
       }
 
       return incidenteActualizado;
@@ -504,243 +273,13 @@ export class IncidentesService {
       asignadoAUsuarioId: dto.asignadoAUsuarioId,
     });
 
-    const email =
-      dto.email ?? this.configService.get<string>('P6_DEFAULT_EMAIL');
-
-    if (email) {
-      try {
-        await this.p6NotificacionesService.enviarEmailAsignacionTicket({
-          email,
-          incidenteId: id,
-          titulo: incidenteActualizado.titulo,
-          asignadoAUsuarioId: dto.asignadoAUsuarioId,
-        });
-      } catch (error) {
-        this.logger.error(
-          `No se pudo enviar email P6 al asignar incidente ${id}`,
-          error,
-        );
-      }
-    } else {
-      this.logger.warn(
-        `Asignación de ${id} sin email: configure dto.email o P6_DEFAULT_EMAIL.`,
-      );
-    }
+    this.incidentesNotificationService.notificarAsignacion(incidenteActualizado, dto.email).catch(err => {
+        this.logger.error(`Error al notificar asignación en background`, err);
+    });
 
     return incidenteActualizado;
   }
 
-  private mapPrioridadP9(prioridad: string): P9Severity {
-    switch (prioridad) {
-      case 'CRITICA': return 'critical';
-      case 'ALTA': return 'high';
-      case 'MEDIA': return 'medium';
-      case 'BAJA': return 'low';
-      default: return 'medium';
-    }
-  }
-
-  private mapEstadoP9(estado: IncidenteEstado): P9Status {
-    switch (estado) {
-      case IncidenteEstado.CERRADO: return 'resolved';
-      case IncidenteEstado.EN_PROGRESO: return 'investigating';
-      case IncidenteEstado.ABIERTO:
-      case IncidenteEstado.VENCIDO:
-      default: return 'open';
-    }
-  }
-
-  private async notificarEventoAP9(incidente: Incidente, usuarioId: string, eventType: P9EventType): Promise<void> {
-    const payloadData: IP9Payload = {
-      incident_id: incidente.id,
-      title: (eventType === 'incident_created' || eventType === 'incident_status_changed') ? incidente.titulo : undefined,
-      severity: this.mapPrioridadP9(incidente.prioridad),
-      status: this.mapEstadoP9(incidente.estado),
-    };
-
-    if (eventType === 'incident_created') {
-      payloadData.opened_at = incidente.creadoEn?.toISOString() ?? new Date().toISOString();
-    }
-
-    if (eventType === 'incident_resolved') {
-      const fechaResolucion = incidente.fechaResolucion ?? new Date();
-      payloadData.resolved_at = fechaResolucion.toISOString();
-      payloadData.resolution_time_hours = this.calcularMttrHoras(incidente.creadoEn, fechaResolucion);
-      payloadData.sla_met = !incidente.slaVencido;
-    }
-
-    const envelope: IP9Envelope = {
-      source: 'incidents',
-      event_type: eventType,
-      payload: payloadData,
-    };
-
-    try {
-      await firstValueFrom(
-        this.httpService.post(this.p9AnaliticaUrl, envelope),
-      );
-
-      await this.registrarAuditoriaEventoP9(
-        incidente.id,
-        usuarioId,
-        `Evento enviado a P09: ${eventType}.`,
-      );
-
-      this.logger.log(`Evento ${eventType} enviado a P09 para incidente ${incidente.id}.`);
-    } catch (error) {
-      await this.registrarAuditoriaEventoP9(
-        incidente.id,
-        usuarioId,
-        `Fallo al enviar evento a P09: ${eventType}.`,
-      );
-
-      this.logger.error(
-        `No se pudo enviar el evento ${eventType} a P09 para incidente ${incidente.id}`,
-        error,
-      );
-    }
-  }
-
-  private async registrarAuditoriaEventoP9(
-    incidenteId: string,
-    usuarioId: string,
-    descripcionAccion: string,
-  ): Promise<void> {
-    try {
-      await this.auditoriaRepository.save({
-        incidenteId,
-        accionPorUsuarioId: usuarioId,
-        descripcionAccion,
-      });
-    } catch (error) {
-      this.logger.error(
-        `No se pudo registrar auditoría de evento P09 para incidente ${incidenteId}`,
-        error,
-      );
-    }
-  }
-
-  private calcularMttrHoras(creadoEn: Date | undefined, fechaResolucion: Date): number {
-    if (!creadoEn) {
-      return 0;
-    }
-
-    const diferenciaMs = fechaResolucion.getTime() - creadoEn.getTime();
-    return Math.max(0, Number((diferenciaMs / 3600000).toFixed(2)));
-  }
-
-  async crearComentario(
-    incidenteId: string,
-    createComentarioDto: CreateComentarioDto,
-    usuarioId: string,
-  ): Promise<Comentario> {
-    // Verificar que el incidente existe
-    const incidente = await this.incidenteRepository.findOne({
-      where: { id: incidenteId },
-    });
-
-    if (!incidente) {
-      throw new NotFoundException(
-        `Incidente con ID ${incidenteId} no encontrado`,
-      );
-    }
-
-    // Crear el comentario
-    const comentario = this.comentarioRepository.create({
-      incidenteId,
-      usuarioId,
-      contenido: createComentarioDto.contenido,
-    });
-
-    const comentarioGuardado = await this.comentarioRepository.save(comentario);
-
-    // Registrar auditoría
-    await this.auditoriaRepository.save({
-      incidenteId,
-      accionPorUsuarioId: usuarioId,
-      descripcionAccion: `Comentario agregado: "${createComentarioDto.contenido.substring(0, 50)}..."`,
-    });
-
-    // Emitir evento en tiempo real vía WebSocket
-    this.eventsGateway.emitNuevoComentario(incidenteId, comentarioGuardado);
-
-    this.logger.log(
-      `Comentario creado en incidente ${incidenteId} por usuario ${usuarioId}`,
-    );
-
-    return comentarioGuardado;
-  }
-
-  async obtenerComentarios(incidenteId: string): Promise<Comentario[]> {
-    // Verificar que el incidente existe
-    const incidente = await this.incidenteRepository.findOne({
-      where: { id: incidenteId },
-    });
-
-    if (!incidente) {
-      throw new NotFoundException(
-        `Incidente con ID ${incidenteId} no encontrado`,
-      );
-    }
-
-    const comentarios = await this.comentarioRepository.find({
-      where: { incidenteId },
-      order: { creadoEn: 'ASC' },
-    });
-
-    return comentarios;
-  }
-
-  async eliminarComentario(
-    incidenteId: string,
-    comentarioId: string,
-    usuarioId: string,
-  ): Promise<void> {
-    // Verificar que el incidente existe
-    const incidente = await this.incidenteRepository.findOne({
-      where: { id: incidenteId },
-    });
-
-    if (!incidente) {
-      throw new NotFoundException(
-        `Incidente con ID ${incidenteId} no encontrado`,
-      );
-    }
-
-    // Obtener el comentario
-    const comentario = await this.comentarioRepository.findOne({
-      where: { id: comentarioId, incidenteId },
-    });
-
-    if (!comentario) {
-      throw new NotFoundException(
-        `Comentario con ID ${comentarioId} no encontrado en incidente ${incidenteId}`,
-      );
-    }
-
-    // Solo el creador o un admin puede eliminar (por ahora solo verificamos que sea el creador)
-    if (comentario.usuarioId !== usuarioId) {
-      throw new Error(
-        'Solo el creador del comentario puede eliminarlo',
-      );
-    }
-
-    await this.comentarioRepository.delete(comentarioId);
-
-    // Registrar auditoría
-    await this.auditoriaRepository.save({
-      incidenteId,
-      accionPorUsuarioId: usuarioId,
-      descripcionAccion: `Comentario eliminado: "${comentario.contenido.substring(0, 50)}..."`,
-    });
-
-    // Emitir evento en tiempo real vía WebSocket
-    this.eventsGateway.emitComentarioEliminado(incidenteId, comentarioId);
-
-    this.logger.log(
-      `Comentario ${comentarioId} eliminado en incidente ${incidenteId} por usuario ${usuarioId}`,
-    );
-  }
   async obtenerPlaybook(id: string): Promise<string[]> {
     const incidente = await this.incidenteRepository.findOne({
       where: { id },

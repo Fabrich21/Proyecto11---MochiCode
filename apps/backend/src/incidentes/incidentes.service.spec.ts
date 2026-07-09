@@ -4,19 +4,14 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Incidente } from '../database/entities/incidente.entity';
 import { HistorialEstado } from '../database/entities/historial-estado.entity';
 import { Auditoria } from '../database/entities/auditoria.entity';
-import { Comentario } from '../database/entities/comentario.entity';
 import { DataSource } from 'typeorm';
 import { IncidenteEstado } from '@proyecto/shared-types';
 import { NotFoundException } from '@nestjs/common';
-import { HttpService } from '@nestjs/axios';
-import { ConfigService } from '@nestjs/config';
-import { of, throwError } from 'rxjs';
 import { PoliticaSla } from '../database/entities/politica-sla.entity';
 import { Sistema } from '../database/entities/sistema.entity';
 import { EventsGateway } from '../events/events.gateway';
-import { P6NotificacionesService } from '../p6-notificaciones/p6-notificaciones.service';
 import { PlaybooksService } from './playbooks.service';
-import { EventoAlerta } from '../database/entities/evento-alerta.entity';
+import { IncidentesNotificationService } from './incidentes-notification.service';
 
 describe('IncidentesService', () => {
   let service: IncidentesService;
@@ -38,22 +33,11 @@ describe('IncidentesService', () => {
 
   const mockHistorialRepository = {};
 
-  const mockComentarioRepository = {
-    save: jest.fn(),
-    find: jest.fn(),
-    findOne: jest.fn(),
-    delete: jest.fn(),
-  };
-
   const mockPoliticaSlaRepository = {
     findOne: jest.fn(),
   };
 
   const mockSistemaRepository = {
-    findOne: jest.fn(),
-  };
-
-  const mockEventoAlertaRepository = {
     findOne: jest.fn(),
   };
 
@@ -80,36 +64,14 @@ describe('IncidentesService', () => {
     emitIncidenteActualizado: jest.fn(),
   };
 
-  const mockHttpService = {
-    post: jest.fn(),
-    get: jest.fn(),
-  };
-
-  const mockP6NotificacionesService = {
-    enviarEmailAsignacionTicket: jest.fn(),
-    enviarEmailResolucionTicket: jest.fn(),
-  };
-
-  const mockConfigService = {
-    get: jest.fn().mockImplementation((key: string, defaultValue?: string) => {
-      if (key === 'P9_ANALITICA_URL') {
-        return 'http://p9-analitica/v1/events';
-      }
-      if (key === 'P7_CRM_ESTADO_URL') {
-        return 'https://pgti-proyecto-crm-backend.vercel.app/api/v1/incidentes/estado-ticket';
-      }
-      if (key === 'INCIDENTES_API_KEY') {
-        return 'auth_p07_secret';
-      }
-      if (key === 'SISTEMA_AUTOMATICO_UUID') {
-        return '00000000-0000-0000-0000-000000000001';
-      }
-      return defaultValue;
-    }),
-  };
-
   const mockAuditoriaRepository = {
     save: jest.fn(),
+  };
+
+  const mockIncidentesNotificationService = {
+    notificarEventoAP9: jest.fn().mockResolvedValue(undefined),
+    notificarResolucion: jest.fn().mockResolvedValue(undefined),
+    notificarAsignacion: jest.fn().mockResolvedValue(undefined),
   };
 
   beforeEach(async () => {
@@ -137,14 +99,6 @@ describe('IncidentesService', () => {
           useValue: mockSistemaRepository,
         },
         {
-          provide: getRepositoryToken(Comentario),
-          useValue: mockComentarioRepository,
-        },
-        {
-          provide: getRepositoryToken(EventoAlerta),
-          useValue: mockEventoAlertaRepository,
-        },
-        {
           provide: DataSource,
           useValue: mockDataSource,
         },
@@ -153,22 +107,14 @@ describe('IncidentesService', () => {
           useValue: mockEventsGateway,
         },
         {
-          provide: HttpService,
-          useValue: mockHttpService,
-        },
-        {
-          provide: P6NotificacionesService,
-          useValue: mockP6NotificacionesService,
-        },
-        {
-          provide: ConfigService,
-          useValue: mockConfigService,
-        },
-        {
           provide: PlaybooksService,
           useValue: {
             obtenerPlaybookParaIncidente: jest.fn().mockReturnValue(['Paso 1']),
           },
+        },
+        {
+          provide: IncidentesNotificationService,
+          useValue: mockIncidentesNotificationService,
         },
       ],
     }).compile();
@@ -252,152 +198,6 @@ describe('IncidentesService', () => {
     });
   });
 
-  describe('obtenerEstado', () => {
-    it('debería consultar el estado en el CRM externo', async () => {
-      const mockResponse = {
-        ok: true,
-        ticket: {
-          id: 'inc-estado-1',
-          asunto: 'Caída de servicio',
-          estado: 'resuelto',
-          prioridad: 'alta',
-        },
-      };
-      mockHttpService.get.mockReturnValue(of({ data: mockResponse }));
-
-      const result = await service.obtenerEstado('inc-estado-1');
-
-      expect(mockHttpService.get).toHaveBeenCalledWith(
-        'https://pgti-proyecto-crm-backend.vercel.app/api/v1/incidentes/estado-ticket/inc-estado-1',
-        {
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          params: {
-            api_key: 'auth_p07_secret',
-          },
-        },
-      );
-      expect(result).toEqual(mockResponse);
-    });
-
-    it('debería propagar la respuesta de error del CRM externo', async () => {
-      mockHttpService.get.mockReturnValue(
-        throwError(() => ({
-          response: {
-            status: 404,
-            data: { ok: false, message: 'Ticket no encontrado' },
-          },
-        })),
-      );
-
-      await expect(service.obtenerEstado('no-existe')).rejects.toMatchObject({
-        response: { ok: false, message: 'Ticket no encontrado' },
-        status: 404,
-      });
-    });
-
-    it('debería responder 502 si CRM externo no está disponible', async () => {
-      mockHttpService.get.mockReturnValue(throwError(() => new Error('network down')));
-
-      await expect(service.obtenerEstado('crm-caido')).rejects.toMatchObject({
-        response: { ok: false, message: 'No se pudo consultar el sistema externo' },
-        status: 502,
-      });
-    });
-  });
-
-  describe('sincronizarEstadosDesdeCrm', () => {
-    it('debería actualizar el incidente cuando el estado CRM difiere del local', async () => {
-      mockIncidenteRepository.find.mockResolvedValue([
-        { id: 'inc-1', sistemaId: 'P07', estado: IncidenteEstado.EN_PROGRESO },
-      ]);
-      mockEventoAlertaRepository.findOne.mockResolvedValue({
-        payload: { id_ticket_interno: 'crm-1' },
-      });
-      mockHttpService.get.mockReturnValue(
-        of({ data: { ok: true, ticket: { estado: 'resuelto' } } }),
-      );
-      const cambiarEstadoSpy = jest
-        .spyOn(service, 'cambiarEstado')
-        .mockResolvedValue({} as any);
-
-      const result = await service.sincronizarEstadosDesdeCrm();
-
-      expect(mockIncidenteRepository.find).toHaveBeenCalled();
-      expect(mockHttpService.get).toHaveBeenCalledWith(
-        'https://pgti-proyecto-crm-backend.vercel.app/api/v1/incidentes/estado-ticket/crm-1',
-        expect.any(Object),
-      );
-      expect(cambiarEstadoSpy).toHaveBeenCalledWith('inc-1', {
-        estado: IncidenteEstado.CERRADO,
-        usuarioId: '00000000-0000-0000-0000-000000000001',
-      });
-      expect(result).toEqual({ revisados: 1, actualizados: 1 });
-    });
-
-    it('no debería actualizar cuando el estado CRM coincide con el local', async () => {
-      mockIncidenteRepository.find.mockResolvedValue([
-        { id: 'inc-2', sistemaId: 'P7', estado: IncidenteEstado.EN_PROGRESO },
-      ]);
-      mockEventoAlertaRepository.findOne.mockResolvedValue({
-        payload: { id: 'crm-2' },
-      });
-      mockHttpService.get.mockReturnValue(
-        of({ data: { ok: true, ticket: { estado: 'progreso' } } }),
-      );
-      const cambiarEstadoSpy = jest
-        .spyOn(service, 'cambiarEstado')
-        .mockResolvedValue({} as any);
-
-      const result = await service.sincronizarEstadosDesdeCrm();
-
-      expect(cambiarEstadoSpy).not.toHaveBeenCalled();
-      expect(result).toEqual({ revisados: 1, actualizados: 0 });
-    });
-
-    it('debería omitir el incidente cuando no hay id de ticket CRM', async () => {
-      mockIncidenteRepository.find.mockResolvedValue([
-        { id: 'inc-sin-ref', sistemaId: 'P07', estado: IncidenteEstado.ABIERTO },
-      ]);
-      mockEventoAlertaRepository.findOne.mockResolvedValue(null);
-      const cambiarEstadoSpy = jest
-        .spyOn(service, 'cambiarEstado')
-        .mockResolvedValue({} as any);
-
-      const result = await service.sincronizarEstadosDesdeCrm();
-
-      expect(mockHttpService.get).not.toHaveBeenCalled();
-      expect(cambiarEstadoSpy).not.toHaveBeenCalled();
-      expect(result).toEqual({ revisados: 1, actualizados: 0 });
-    });
-
-    it('no debería romper el lote si un incidente falla en CRM', async () => {
-      mockIncidenteRepository.find.mockResolvedValue([
-        { id: 'inc-ok', sistemaId: 'P07', estado: IncidenteEstado.ABIERTO },
-        { id: 'inc-fail', sistemaId: 'P07', estado: IncidenteEstado.ABIERTO },
-      ]);
-      mockEventoAlertaRepository.findOne
-        .mockResolvedValueOnce({ payload: { id_ticket_interno: 'crm-ok' } })
-        .mockResolvedValueOnce({ payload: { id_ticket_interno: 'crm-fail' } });
-      mockHttpService.get
-        .mockReturnValueOnce(of({ data: { ok: true, ticket: { estado: 'cerrado' } } }))
-        .mockReturnValueOnce(throwError(() => new Error('network down')));
-      const cambiarEstadoSpy = jest
-        .spyOn(service, 'cambiarEstado')
-        .mockResolvedValue({} as any);
-
-      const result = await service.sincronizarEstadosDesdeCrm();
-
-      expect(cambiarEstadoSpy).toHaveBeenCalledTimes(1);
-      expect(cambiarEstadoSpy).toHaveBeenCalledWith('inc-ok', {
-        estado: IncidenteEstado.CERRADO,
-        usuarioId: '00000000-0000-0000-0000-000000000001',
-      });
-      expect(result).toEqual({ revisados: 2, actualizados: 1 });
-    });
-  });
-
   describe('create', () => {
     it('debería crear un incidente manual, historial y auditoría', async () => {
       const createDto = {
@@ -429,8 +229,6 @@ describe('IncidentesService', () => {
         .mockResolvedValueOnce({})
         .mockResolvedValueOnce({});
 
-      mockHttpService.post.mockReturnValue(of({ data: { ok: true } }));
-
       const result = await service.create(createDto);
 
       expect(mockSistemaRepository.findOne).toHaveBeenCalledWith({ where: { sistemaId: 'P04' } });
@@ -447,18 +245,10 @@ describe('IncidentesService', () => {
       expect(mockQueryRunner.manager.save).toHaveBeenCalledTimes(3);
       expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
       
-      expect(mockHttpService.post).toHaveBeenCalledWith(
-        'http://p9-analitica/v1/events',
-        expect.objectContaining({
-          source: 'incidents',
-          event_type: 'incident_created',
-          payload: expect.objectContaining({
-            incident_id: 'inc-1',
-            title: createDto.titulo,
-            severity: 'high',
-            status: 'open'
-          })
-        }),
+      expect(mockIncidentesNotificationService.notificarEventoAP9).toHaveBeenCalledWith(
+        incidenteCreado,
+        createDto.creadorUsuarioId,
+        'incident_created'
       );
 
       expect(result).toEqual(incidenteCreado);
@@ -501,7 +291,7 @@ describe('IncidentesService', () => {
       expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
     });
 
-    it('debería actualizar el estado, notificar P09 y crear historial al cerrar', async () => {
+    it('debería actualizar el estado y notificar P09 y resolución al cerrar', async () => {
       const mockIncidente = {
         id: '1',
         estado: IncidenteEstado.ABIERTO,
@@ -517,8 +307,6 @@ describe('IncidentesService', () => {
       };
 
       mockQueryRunner.manager.findOne.mockResolvedValue(mockIncidente);
-      mockHttpService.post.mockReturnValue(of({ data: { ok: true } }));
-      mockAuditoriaRepository.save.mockResolvedValue({ id: 'audit-1' });
       mockQueryRunner.manager.save
         .mockResolvedValueOnce(incidenteActualizado)
         .mockResolvedValueOnce({});
@@ -529,105 +317,19 @@ describe('IncidentesService', () => {
       expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
       expect(result.estado).toBe(IncidenteEstado.CERRADO);
       expect(mockEventsGateway.emitEstadoActualizado).toHaveBeenCalledWith('1', IncidenteEstado.CERRADO);
-      expect(mockHttpService.post).toHaveBeenCalledWith(
-        'http://p9-analitica/v1/events',
-        expect.objectContaining({
-          source: 'incidents',
-          event_type: 'incident_resolved',
-          payload: expect.objectContaining({
-            incident_id: '1',
-            resolution_time_hours: expect.any(Number),
-            sla_met: true,
-          })
-        }),
+      
+      expect(mockIncidentesNotificationService.notificarEventoAP9).toHaveBeenCalledWith(
+        incidenteActualizado,
+        'user1',
+        'incident_resolved'
       );
-      expect(mockAuditoriaRepository.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          incidenteId: '1',
-          accionPorUsuarioId: 'user1',
-          descripcionAccion: expect.stringContaining('Evento enviado a P09: incident_resolved'),
-        }),
-      );
-    });
-
-    it('debería calcular y enviar MTTR en minutos al cerrar un incidente', async () => {
-      jest.useFakeTimers();
-      jest.setSystemTime(new Date('2026-06-28T01:00:00.000Z'));
-
-      const creadoEn = new Date('2026-06-28T00:00:00.000Z');
-      const mockIncidente = {
-        id: 'mttr-1',
-        estado: IncidenteEstado.EN_PROGRESO,
-        sistemaId: 'P8',
-        creadoEn,
-        slaVencido: false,
-        prioridad: 'MEDIA',
-      };
-
-      mockQueryRunner.manager.findOne.mockResolvedValue(mockIncidente);
-      mockQueryRunner.manager.save
-        .mockResolvedValueOnce({ ...mockIncidente, estado: IncidenteEstado.CERRADO, fechaResolucion: new Date() })
-        .mockResolvedValueOnce({});
-      mockHttpService.post.mockReturnValue(of({ data: { ok: true } }));
-      mockAuditoriaRepository.save.mockResolvedValue({ id: 'audit-2' });
-
-      await service.cambiarEstado('mttr-1', { estado: IncidenteEstado.CERRADO, usuarioId: 'user1' });
-
-      expect(mockHttpService.post).toHaveBeenCalledWith(
-        'http://p9-analitica/v1/events',
-        expect.objectContaining({
-          source: 'incidents',
-          event_type: 'incident_resolved',
-          payload: expect.objectContaining({
-            incident_id: 'mttr-1',
-            resolution_time_hours: 1,
-            sla_met: true,
-          })
-        }),
-      );
-
-      jest.useRealTimers();
-    });
-
-    it('no debería fallar el cierre si el webhook de P09 retorna error', async () => {
-      const mockIncidente = {
-        id: 'error-webhook',
-        estado: IncidenteEstado.EN_PROGRESO,
-        sistemaId: 'P1',
-        creadoEn: new Date('2026-06-28T00:00:00.000Z'),
-        slaVencido: false,
-        prioridad: 'ALTA',
-      };
-      const incidenteActualizado = {
-        ...mockIncidente,
-        estado: IncidenteEstado.CERRADO,
-        fechaResolucion: new Date(),
-      };
-
-      mockQueryRunner.manager.findOne.mockResolvedValue(mockIncidente);
-      mockQueryRunner.manager.save
-        .mockResolvedValueOnce(incidenteActualizado)
-        .mockResolvedValueOnce({});
-      mockHttpService.post.mockReturnValue(throwError(() => new Error('P09 unavailable')));
-      mockAuditoriaRepository.save.mockResolvedValue({ id: 'audit-3' });
-
-      const result = await service.cambiarEstado('error-webhook', { estado: IncidenteEstado.CERRADO, usuarioId: 'user1' });
-
-      expect(result.estado).toBe(IncidenteEstado.CERRADO);
-      expect(mockHttpService.post).toHaveBeenCalled();
-      expect(mockQueryRunner.commitTransaction).toHaveBeenCalled();
-      expect(mockAuditoriaRepository.save).toHaveBeenCalledWith(
-        expect.objectContaining({
-          incidenteId: 'error-webhook',
-          accionPorUsuarioId: 'user1',
-          descripcionAccion: expect.stringContaining('Fallo al enviar evento a P09: incident_resolved'),
-        }),
-      );
+      
+      expect(mockIncidentesNotificationService.notificarResolucion).toHaveBeenCalledWith(mockIncidente);
     });
   });
 
   describe('asignarIncidente', () => {
-    it('debería asignar el ticket y notificar por email vía P6', async () => {
+    it('debería asignar el ticket y notificar por email', async () => {
       const mockIncidente = { id: '1', titulo: 'Ticket test', asignadoAUsuarioId: undefined };
       const incidenteAsignado = {
         ...mockIncidente,
@@ -646,12 +348,10 @@ describe('IncidentesService', () => {
       });
 
       expect(result.asignadoAUsuarioId).toBe('user-asignado');
-      expect(mockP6NotificacionesService.enviarEmailAsignacionTicket).toHaveBeenCalledWith({
-        email: 'operador@test.com',
-        incidenteId: '1',
-        titulo: 'Ticket test',
-        asignadoAUsuarioId: 'user-asignado',
-      });
+      expect(mockIncidentesNotificationService.notificarAsignacion).toHaveBeenCalledWith(
+        incidenteAsignado,
+        'operador@test.com'
+      );
       expect(mockEventsGateway.emitIncidenteActualizado).toHaveBeenCalled();
     });
   });

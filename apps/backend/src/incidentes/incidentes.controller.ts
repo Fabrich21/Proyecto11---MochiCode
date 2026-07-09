@@ -1,5 +1,7 @@
 import { Controller, Get, Patch, Param, Body, Query, Post, UseGuards, Request, Delete } from '@nestjs/common';
 import { IncidentesService } from './incidentes.service';
+import { ComentariosService } from './comentarios.service';
+import { IncidentesSyncService } from './incidentes-sync.service';
 import { GetIncidentesDto } from './dto/get-incidentes.dto';
 import { UpdateEstadoIncidenteDto } from './dto/update-estado-incidente.dto';
 import { CreateIncidenteDto } from './dto/create-incidente.dto';
@@ -28,7 +30,11 @@ import { P06ApiKeyGuard } from '../auth/guards/p06-api-key.guard';
 @Controller('incidentes')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class IncidentesController {
-  constructor(private readonly incidentesService: IncidentesService) {}
+  constructor(
+    private readonly incidentesService: IncidentesService,
+    private readonly comentariosService: ComentariosService,
+    private readonly incidentesSyncService: IncidentesSyncService,
+  ) {}
 
   @Post()
   @ApiOperation({ summary: 'Crear un incidente manualmente' })
@@ -156,7 +162,7 @@ export class IncidentesController {
   @ApiNotFoundResponse({ description: 'Ticket no encontrado' })
   @ApiUnauthorizedResponse({ description: 'api_key inválida o ausente' })
   obtenerEstado(@Param('id_ticket') idTicket: string) {
-    return this.incidentesService.obtenerEstado(idTicket);
+    return this.incidentesSyncService.obtenerEstado(idTicket);
   }
 
   @Patch(':id/estado')
@@ -229,7 +235,7 @@ export class IncidentesController {
     @Body() createComentarioDto: CreateComentarioDto,
     @Request() req: any,
   ) {
-    return this.incidentesService.crearComentario(
+    return this.comentariosService.crearComentario(
       incidenteId,
       createComentarioDto,
       req.user.userId,
@@ -245,7 +251,7 @@ export class IncidentesController {
   })
   @ApiNotFoundResponse({ description: 'Incidente no encontrado' })
   obtenerComentarios(@Param('id') incidenteId: string) {
-    return this.incidentesService.obtenerComentarios(incidenteId);
+    return this.comentariosService.obtenerComentarios(incidenteId);
   }
 
   @Delete(':id/comentarios/:comentarioId')
@@ -259,7 +265,7 @@ export class IncidentesController {
     @Param('comentarioId') comentarioId: string,
     @Request() req: any,
   ) {
-    return this.incidentesService.eliminarComentario(
+    return this.comentariosService.eliminarComentario(
       incidenteId,
       comentarioId,
       req.user.userId,

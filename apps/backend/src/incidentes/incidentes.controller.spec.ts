@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { IncidentesController } from './incidentes.controller';
 import { IncidentesService } from './incidentes.service';
+import { ComentariosService } from './comentarios.service';
+import { IncidentesSyncService } from './incidentes-sync.service';
 import { IncidenteEstado } from '@proyecto/shared-types';
 import { P06ApiKeyGuard } from '../auth/guards/p06-api-key.guard';
 import { ConfigService } from '@nestjs/config';
@@ -8,13 +10,23 @@ import { ConfigService } from '@nestjs/config';
 describe('IncidentesController', () => {
   let controller: IncidentesController;
   let service: IncidentesService;
+  let syncService: IncidentesSyncService;
 
   // Creamos un mock del servicio para no tocar la base de datos real
   const mockIncidentesService = {
     create: jest.fn(),
     findAll: jest.fn(),
-    obtenerEstado: jest.fn(),
     cambiarEstado: jest.fn(),
+  };
+
+  const mockComentariosService = {
+    crearComentario: jest.fn(),
+    obtenerComentarios: jest.fn(),
+    eliminarComentario: jest.fn(),
+  };
+
+  const mockIncidentesSyncService = {
+    obtenerEstado: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -24,6 +36,14 @@ describe('IncidentesController', () => {
         {
           provide: IncidentesService,
           useValue: mockIncidentesService,
+        },
+        {
+          provide: ComentariosService,
+          useValue: mockComentariosService,
+        },
+        {
+          provide: IncidentesSyncService,
+          useValue: mockIncidentesSyncService,
         },
         {
           provide: P06ApiKeyGuard,
@@ -38,6 +58,7 @@ describe('IncidentesController', () => {
 
     controller = module.get<IncidentesController>(IncidentesController);
     service = module.get<IncidentesService>(IncidentesService);
+    syncService = module.get<IncidentesSyncService>(IncidentesSyncService);
   });
 
   afterEach(() => {
@@ -97,11 +118,11 @@ describe('IncidentesController', () => {
           prioridad: 'alta',
         },
       };
-      mockIncidentesService.obtenerEstado.mockResolvedValue(mockResult);
+      mockIncidentesSyncService.obtenerEstado.mockResolvedValue(mockResult);
 
       const result = await controller.obtenerEstado('uuid-123');
 
-      expect(service.obtenerEstado).toHaveBeenCalledWith('uuid-123');
+      expect(syncService.obtenerEstado).toHaveBeenCalledWith('uuid-123');
       expect(result).toEqual(mockResult);
     });
   });
@@ -114,10 +135,11 @@ describe('IncidentesController', () => {
       const updateDto = { estado: IncidenteEstado.CERRADO, usuarioId: 'user-123' };
 
       // Actuar
-      const result = await controller.cambiarEstado('uuid-123', updateDto, { user: { sub: 'mock-user' } });
+      const result = await controller.cambiarEstado('uuid-123', updateDto, { user: { userId: 'mock-user' } });
 
       // Afirmar
-      expect(service.cambiarEstado).toHaveBeenCalledWith('uuid-123', updateDto);
+      // req.user.userId es asignado al dto antes de llamar al servicio
+      expect(service.cambiarEstado).toHaveBeenCalledWith('uuid-123', { ...updateDto, usuarioId: 'mock-user' });
       expect(result).toEqual(mockResult);
     });
   });
