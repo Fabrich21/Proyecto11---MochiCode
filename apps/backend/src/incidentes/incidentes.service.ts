@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource, In } from 'typeorm';
 import { Incidente } from '../database/entities/incidente.entity';
@@ -175,7 +175,7 @@ export class IncidentesService {
     const actorId = updateDto.usuarioId || usuarioId;
     
     if (!actorId) {
-       throw new Error('Usuario ID es requerido para cambiar estado');
+       throw new BadRequestException('Usuario ID es requerido para cambiar estado');
     }
 
     const queryRunner = this.dataSource.createQueryRunner();
