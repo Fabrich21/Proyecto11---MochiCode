@@ -15,6 +15,7 @@ import { PoliticaSla } from '../database/entities/politica-sla.entity';
 import { Sistema } from '../database/entities/sistema.entity';
 import { EventsGateway } from '../events/events.gateway';
 import { P6NotificacionesService } from '../p6-notificaciones/p6-notificaciones.service';
+import { PlaybooksService } from './playbooks.service';
 import { EventoAlerta } from '../database/entities/evento-alerta.entity';
 
 describe('IncidentesService', () => {
@@ -162,6 +163,12 @@ describe('IncidentesService', () => {
         {
           provide: ConfigService,
           useValue: mockConfigService,
+        },
+        {
+          provide: PlaybooksService,
+          useValue: {
+            obtenerPlaybookParaIncidente: jest.fn().mockReturnValue(['Paso 1']),
+          },
         },
       ],
     }).compile();

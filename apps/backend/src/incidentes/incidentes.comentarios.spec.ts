@@ -14,6 +14,7 @@ import { ConfigService } from '@nestjs/config';
 import { P6NotificacionesService } from '../p6-notificaciones/p6-notificaciones.service';
 import { NotFoundException } from '@nestjs/common';
 import { EventoAlerta } from '../database/entities/evento-alerta.entity';
+import { PlaybooksService } from './playbooks.service';
 
 describe('IncidentesService - Comentarios', () => {
   let service: IncidentesService;
@@ -86,6 +87,10 @@ describe('IncidentesService - Comentarios', () => {
         {
           provide: ConfigService,
           useValue: { get: jest.fn() },
+        },
+        {
+          provide: PlaybooksService,
+          useValue: { obtenerPlaybookParaIncidente: jest.fn().mockReturnValue(['Paso 1']) },
         },
       ],
     }).compile();
