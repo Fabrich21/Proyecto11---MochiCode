@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger, HttpException, HttpStatus } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
 import { HttpService } from '@nestjs/axios';
@@ -113,6 +113,54 @@ export class IncidentesService {
         registros_por_pagina: limit,
       },
     };
+  }
+
+  async obtenerEstado(id: string) {
+    const incidente = await this.incidenteRepository.findOne({
+      where: { id },
+    });
+
+    if (!incidente) {
+      throw new HttpException(
+        { ok: false, message: 'Ticket no encontrado' },
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    return {
+      ok: true,
+      ticket: {
+        id: incidente.id,
+        asunto: incidente.titulo,
+        estado: this.mapearEstadoTicket(incidente.estado),
+        prioridad: incidente.prioridad.toLowerCase(),
+        canal: 'email',
+        cliente_id: null,
+        cliente_nombre: null,
+        agente_id: incidente.asignadoAUsuarioId ?? null,
+        fecha_vencimiento_sla: incidente.fechaLimiteResolucion?.toISOString() ?? null,
+        pedido_id_ref: null,
+        suscripcion_id_ref: null,
+        pago_id_ref: null,
+        salud_ref: null,
+        resolucion: incidente.fechaResolucion ? incidente.descripcion ?? null : null,
+        creado_en: incidente.creadoEn.toISOString(),
+        actualizado_en: (incidente.fechaResolucion ?? incidente.creadoEn).toISOString(),
+      },
+    };
+  }
+
+  private mapearEstadoTicket(estado: IncidenteEstado): string {
+    switch (estado) {
+      case IncidenteEstado.ABIERTO:
+        return 'abierto';
+      case IncidenteEstado.EN_PROGRESO:
+        return 'progreso';
+      case IncidenteEstado.CERRADO:
+        return 'cerrado';
+      default:
+        return String(estado).toLowerCase();
+    }
   }
 
   async create(createDto: CreateIncidenteDto) {
