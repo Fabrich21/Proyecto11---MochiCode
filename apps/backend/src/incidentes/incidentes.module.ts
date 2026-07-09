@@ -11,6 +11,7 @@ import { Comentario } from '../database/entities/comentario.entity';
 import { EventsModule } from '../events/events.module';
 import { P06ApiKeyGuard } from '../auth/guards/p06-api-key.guard';
 import { IncidentesScheduler } from './incidentes.scheduler';
+import { EventoAlerta } from '../database/entities/evento-alerta.entity';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { IncidentesScheduler } from './incidentes.scheduler';
       PoliticaSla,
       Sistema,
       Comentario,
+      EventoAlerta,
     ]),
     EventsModule,
   ],

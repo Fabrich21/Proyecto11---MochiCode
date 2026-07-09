@@ -15,6 +15,7 @@ import { PoliticaSla } from '../database/entities/politica-sla.entity';
 import { Sistema } from '../database/entities/sistema.entity';
 import { EventsGateway } from '../events/events.gateway';
 import { P6NotificacionesService } from '../p6-notificaciones/p6-notificaciones.service';
+import { EventoAlerta } from '../database/entities/evento-alerta.entity';
 
 describe('IncidentesService', () => {
   let service: IncidentesService;
@@ -48,6 +49,10 @@ describe('IncidentesService', () => {
   };
 
   const mockSistemaRepository = {
+    findOne: jest.fn(),
+  };
+
+  const mockEventoAlertaRepository = {
     findOne: jest.fn(),
   };
 
@@ -133,6 +138,10 @@ describe('IncidentesService', () => {
         {
           provide: getRepositoryToken(Comentario),
           useValue: mockComentarioRepository,
+        },
+        {
+          provide: getRepositoryToken(EventoAlerta),
+          useValue: mockEventoAlertaRepository,
         },
         {
           provide: DataSource,
@@ -296,6 +305,9 @@ describe('IncidentesService', () => {
       mockIncidenteRepository.find.mockResolvedValue([
         { id: 'inc-1', sistemaId: 'P07', estado: IncidenteEstado.EN_PROGRESO },
       ]);
+      mockEventoAlertaRepository.findOne.mockResolvedValue({
+        payload: { id_ticket_interno: 'crm-1' },
+      });
       mockHttpService.get.mockReturnValue(
         of({ data: { ok: true, ticket: { estado: 'resuelto' } } }),
       );
@@ -306,6 +318,10 @@ describe('IncidentesService', () => {
       const result = await service.sincronizarEstadosDesdeCrm();
 
       expect(mockIncidenteRepository.find).toHaveBeenCalled();
+      expect(mockHttpService.get).toHaveBeenCalledWith(
+        'https://pgti-proyecto-crm-backend.vercel.app/api/v1/incidentes/estado-ticket/crm-1',
+        expect.any(Object),
+      );
       expect(cambiarEstadoSpy).toHaveBeenCalledWith('inc-1', {
         estado: IncidenteEstado.CERRADO,
         usuarioId: '00000000-0000-0000-0000-000000000001',
@@ -317,6 +333,9 @@ describe('IncidentesService', () => {
       mockIncidenteRepository.find.mockResolvedValue([
         { id: 'inc-2', sistemaId: 'P7', estado: IncidenteEstado.EN_PROGRESO },
       ]);
+      mockEventoAlertaRepository.findOne.mockResolvedValue({
+        payload: { id: 'crm-2' },
+      });
       mockHttpService.get.mockReturnValue(
         of({ data: { ok: true, ticket: { estado: 'progreso' } } }),
       );
@@ -330,11 +349,30 @@ describe('IncidentesService', () => {
       expect(result).toEqual({ revisados: 1, actualizados: 0 });
     });
 
+    it('debería omitir el incidente cuando no hay id de ticket CRM', async () => {
+      mockIncidenteRepository.find.mockResolvedValue([
+        { id: 'inc-sin-ref', sistemaId: 'P07', estado: IncidenteEstado.ABIERTO },
+      ]);
+      mockEventoAlertaRepository.findOne.mockResolvedValue(null);
+      const cambiarEstadoSpy = jest
+        .spyOn(service, 'cambiarEstado')
+        .mockResolvedValue({} as any);
+
+      const result = await service.sincronizarEstadosDesdeCrm();
+
+      expect(mockHttpService.get).not.toHaveBeenCalled();
+      expect(cambiarEstadoSpy).not.toHaveBeenCalled();
+      expect(result).toEqual({ revisados: 1, actualizados: 0 });
+    });
+
     it('no debería romper el lote si un incidente falla en CRM', async () => {
       mockIncidenteRepository.find.mockResolvedValue([
         { id: 'inc-ok', sistemaId: 'P07', estado: IncidenteEstado.ABIERTO },
         { id: 'inc-fail', sistemaId: 'P07', estado: IncidenteEstado.ABIERTO },
       ]);
+      mockEventoAlertaRepository.findOne
+        .mockResolvedValueOnce({ payload: { id_ticket_interno: 'crm-ok' } })
+        .mockResolvedValueOnce({ payload: { id_ticket_interno: 'crm-fail' } });
       mockHttpService.get
         .mockReturnValueOnce(of({ data: { ok: true, ticket: { estado: 'cerrado' } } }))
         .mockReturnValueOnce(throwError(() => new Error('network down')));

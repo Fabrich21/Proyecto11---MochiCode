@@ -19,6 +19,7 @@ import { Sistema } from '../database/entities/sistema.entity';
 import { AsignarIncidenteDto } from './dto/asignar-incidente.dto';
 import { EventsGateway } from '../events/events.gateway';
 import { P6NotificacionesService } from '../p6-notificaciones/p6-notificaciones.service';
+import { EventoAlerta } from '../database/entities/evento-alerta.entity';
 
 @Injectable()
 export class IncidentesService {
@@ -40,6 +41,8 @@ export class IncidentesService {
     private readonly sistemaRepository: Repository<Sistema>,
     @InjectRepository(Comentario)
     private readonly comentarioRepository: Repository<Comentario>,
+    @InjectRepository(EventoAlerta)
+    private readonly eventoAlertaRepository: Repository<EventoAlerta>,
     private readonly dataSource: DataSource,
     private readonly eventsGateway: EventsGateway,
     private readonly httpService: HttpService,
@@ -189,7 +192,16 @@ export class IncidentesService {
 
     for (const incidente of incidentesActivos) {
       try {
-        const respuesta: any = await this.obtenerEstado(incidente.id);
+        const idTicketCrm = await this.resolverIdTicketCrm(incidente.id);
+
+        if (!idTicketCrm) {
+          this.logger.warn(
+            `No se encontró el id del ticket CRM para el incidente ${incidente.id}; se omite.`,
+          );
+          continue;
+        }
+
+        const respuesta: any = await this.obtenerEstado(idTicketCrm);
         const estadoCrm = respuesta?.ticket?.estado;
         const nuevoEstado = this.mapearEstadoCrmAIncidente(estadoCrm);
 
@@ -211,7 +223,7 @@ export class IncidentesService {
 
         actualizados += 1;
         this.logger.log(
-          `Incidente ${incidente.id} sincronizado desde CRM: ${incidente.estado} → ${nuevoEstado}.`,
+          `Incidente ${incidente.id} sincronizado desde CRM (ticket ${idTicketCrm}): ${incidente.estado} → ${nuevoEstado}.`,
         );
       } catch (error) {
         this.logger.error(
@@ -222,6 +234,24 @@ export class IncidentesService {
     }
 
     return { revisados: incidentesActivos.length, actualizados };
+  }
+
+  /**
+   * Resuelve el id del ticket en CRM asociado a un incidente de P11.
+   * El id llega en el payload de la alerta (id_ticket_interno / id) y queda
+   * almacenado en la tabla eventos_alerta.
+   */
+  private async resolverIdTicketCrm(incidenteId: string): Promise<string | null> {
+    const evento = await this.eventoAlertaRepository.findOne({
+      where: { incidenteId },
+      order: { creadoEn: 'DESC' },
+    });
+
+    const payload = (evento?.payload ?? {}) as Record<string, unknown>;
+    const posibleId =
+      payload.id_ticket_interno ?? payload.id_ticket ?? payload.ticket_id ?? payload.id;
+
+    return typeof posibleId === 'string' && posibleId.length > 0 ? posibleId : null;
   }
 
   private mapearEstadoCrmAIncidente(estadoCrm: unknown): IncidenteEstado | null {
