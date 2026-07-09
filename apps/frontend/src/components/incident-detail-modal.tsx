@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { X, Check, Archive, Clock, Users, FileText, AlertTriangle, MessageSquare, Send } from 'lucide-react';
+import { X, Check, Archive, Clock, Users, FileText, AlertTriangle, MessageSquare, Send, Lightbulb } from 'lucide-react';
 import { Incident, IncidenteEstado, getIncidentStatusBadgeClassName, getIncidentStatusLabel, normalizeIncidentStatus } from './incident-types';
 import { cn } from '@/lib/utils';
 import { formatDate, formatNumberES } from '@/lib/format';
@@ -60,6 +60,36 @@ export function IncidentDetailModal({ incident, onClose, onAcknowledge, onResolv
   const [comentariosError, setComentariosError] = useState('');
   const [nuevoComentario, setNuevoComentario] = useState('');
   const [enviando, setEnviando] = useState(false);
+
+  const [activeTab, setActiveTab] = useState<'detalles' | 'playbook'>('detalles');
+  const [playbook, setPlaybook] = useState<string[]>([]);
+  const [playbookLoading, setPlaybookLoading] = useState(false);
+  const [playbookError, setPlaybookError] = useState('');
+
+  const loadPlaybook = useCallback(async () => {
+    if (playbook.length > 0 || playbookLoading) return;
+    setPlaybookLoading(true);
+    setPlaybookError('');
+    try {
+      const res = await fetch(`/api/incidents/${encodeURIComponent(incident.id)}/playbook`, {
+        cache: 'no-store',
+        headers: { Authorization: `Bearer ${keycloak?.token || ''}` },
+      });
+      if (!res.ok) throw new Error('No se pudo cargar el playbook');
+      const data: unknown = await res.json();
+      setPlaybook(Array.isArray(data) ? (data as string[]) : []);
+    } catch (err) {
+      setPlaybookError(err instanceof Error ? err.message : 'Error al cargar playbook');
+    } finally {
+      setPlaybookLoading(false);
+    }
+  }, [incident.id, keycloak?.token, playbook.length, playbookLoading]);
+
+  useEffect(() => {
+    if (activeTab === 'playbook') {
+      void loadPlaybook();
+    }
+  }, [activeTab, loadPlaybook]);
 
   const loadComentarios = useCallback(async () => {
     setComentariosLoading(true);
@@ -167,10 +197,40 @@ export function IncidentDetailModal({ incident, onClose, onAcknowledge, onResolv
               <X className="h-5 w-5" />
             </button>
           </div>
+          <div className="mt-4 flex gap-4 border-b border-border">
+            <button
+              type="button"
+              onClick={() => setActiveTab('detalles')}
+              className={cn(
+                'pb-2 text-sm font-medium transition-colors relative',
+                activeTab === 'detalles' ? 'text-foreground' : 'text-foreground/50 hover:text-foreground/80'
+              )}
+            >
+              Detalles y Comentarios
+              {activeTab === 'detalles' && (
+                <span className="absolute bottom-[-1px] left-0 w-full h-0.5 bg-primary rounded-t-md" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('playbook')}
+              className={cn(
+                'pb-2 text-sm font-medium transition-colors relative flex items-center gap-2',
+                activeTab === 'playbook' ? 'text-foreground' : 'text-foreground/50 hover:text-foreground/80'
+              )}
+            >
+              <Lightbulb className="h-4 w-4" /> Playbook
+              {activeTab === 'playbook' && (
+                <span className="absolute bottom-[-1px] left-0 w-full h-0.5 bg-primary rounded-t-md" />
+              )}
+            </button>
+          </div>
         </header>
 
         <div className="space-y-6 px-6 py-5">
-          <div className="flex flex-wrap items-center gap-3">
+          {activeTab === 'detalles' ? (
+            <>
+              <div className="flex flex-wrap items-center gap-3">
             <span className={cn('rounded-full border px-3 py-1 text-xs font-semibold',
               incident.severity === 'critical' ? 'text-[#E94B3C] border-[#E94B3C]' :
               incident.severity === 'high' ? 'text-[#F59E0B] border-[#F59E0B]' : 'text-[#3B82F6] border-[#3B82F6]'
@@ -325,6 +385,54 @@ export function IncidentDetailModal({ incident, onClose, onAcknowledge, onResolv
               </button>
             </div>
           </div>
+        </>
+        ) : (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 mb-4">
+                <Lightbulb className="h-5 w-5 text-amber-500" />
+                <h4 className="text-lg font-bold text-foreground">Playbook de Resolución</h4>
+              </div>
+              <p className="text-sm text-foreground/70 mb-4">
+                Estos son los pasos sugeridos por el motor inteligente para mitigar este tipo de incidente:
+              </p>
+
+              {playbookError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {playbookError}
+                </div>
+              )}
+
+              {playbookLoading ? (
+                <div className="space-y-3">
+                  {[1, 2, 3].map((i) => (
+                    <div key={i} className="h-12 w-full animate-pulse rounded-lg bg-secondary/20" />
+                  ))}
+                </div>
+              ) : playbook.length === 0 && !playbookError ? (
+                <p className="rounded-lg border border-border bg-secondary/10 px-4 py-3 text-sm text-foreground/60">
+                  No hay un playbook disponible para este incidente.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {playbook.map((paso, index) => {
+                    const isStep = paso.toLowerCase().startsWith('paso');
+                    return (
+                      <div key={index} className="flex items-start gap-3 rounded-lg border border-border bg-white px-4 py-3 shadow-sm">
+                        {isStep ? (
+                          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                            {index + 1}
+                          </div>
+                        ) : (
+                          <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" />
+                        )}
+                        <p className="text-sm font-medium leading-relaxed text-foreground">{paso}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         <footer className="flex items-center justify-end gap-3 border-t border-border px-6 py-4 flex-wrap">
