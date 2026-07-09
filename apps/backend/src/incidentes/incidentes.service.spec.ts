@@ -31,6 +31,7 @@ describe('IncidentesService', () => {
   const mockIncidenteRepository = {
     createQueryBuilder: jest.fn().mockReturnValue(mockQueryBuilder),
     findOne: jest.fn(),
+    find: jest.fn(),
   };
 
   const mockHistorialRepository = {};
@@ -75,6 +76,7 @@ describe('IncidentesService', () => {
 
   const mockHttpService = {
     post: jest.fn(),
+    get: jest.fn(),
   };
 
   const mockP6NotificacionesService = {
@@ -86,6 +88,15 @@ describe('IncidentesService', () => {
     get: jest.fn().mockImplementation((key: string, defaultValue?: string) => {
       if (key === 'P9_ANALITICA_URL') {
         return 'http://p9-analitica/v1/events';
+      }
+      if (key === 'P7_CRM_ESTADO_URL') {
+        return 'https://pgti-proyecto-crm-backend.vercel.app/api/v1/incidentes/estado-ticket';
+      }
+      if (key === 'INCIDENTES_API_KEY') {
+        return 'auth_p07_secret';
+      }
+      if (key === 'SISTEMA_AUTOMATICO_UUID') {
+        return '00000000-0000-0000-0000-000000000001';
       }
       return defaultValue;
     }),
@@ -226,57 +237,119 @@ describe('IncidentesService', () => {
   });
 
   describe('obtenerEstado', () => {
-    it('debería devolver el estado resumido del incidente', async () => {
-      const mockIncidente = {
-        id: 'inc-estado-1',
-        titulo: 'Caída de servicio',
-        sistemaId: 'P04',
-        estado: IncidenteEstado.EN_PROGRESO,
-        prioridad: 'ALTA',
-        asignadoAUsuarioId: 'user-1',
-        slaVencido: false,
-        fechaLimiteResolucion: new Date('2026-07-08T20:00:00.000Z'),
-        fechaResolucion: null,
-        descripcion: 'Descripción del incidente',
-        creadoEn: new Date('2026-07-08T16:00:00.000Z'),
-      };
-      mockIncidenteRepository.findOne.mockResolvedValue(mockIncidente);
-
-      const result = await service.obtenerEstado('inc-estado-1');
-
-      expect(mockIncidenteRepository.findOne).toHaveBeenCalledWith({
-        where: { id: 'inc-estado-1' },
-      });
-      expect(result).toEqual({
+    it('debería consultar el estado en el CRM externo', async () => {
+      const mockResponse = {
         ok: true,
         ticket: {
           id: 'inc-estado-1',
           asunto: 'Caída de servicio',
-          estado: 'progreso',
+          estado: 'resuelto',
           prioridad: 'alta',
-          canal: 'email',
-          cliente_id: null,
-          cliente_nombre: null,
-          agente_id: 'user-1',
-          fecha_vencimiento_sla: '2026-07-08T20:00:00.000Z',
-          pedido_id_ref: null,
-          suscripcion_id_ref: null,
-          pago_id_ref: null,
-          salud_ref: null,
-          resolucion: null,
-          creado_en: '2026-07-08T16:00:00.000Z',
-          actualizado_en: '2026-07-08T16:00:00.000Z',
         },
-      });
+      };
+      mockHttpService.get.mockReturnValue(of({ data: mockResponse }));
+
+      const result = await service.obtenerEstado('inc-estado-1');
+
+      expect(mockHttpService.get).toHaveBeenCalledWith(
+        'https://pgti-proyecto-crm-backend.vercel.app/api/v1/incidentes/estado-ticket/inc-estado-1',
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          params: {
+            api_key: 'auth_p07_secret',
+          },
+        },
+      );
+      expect(result).toEqual(mockResponse);
     });
 
-    it('debería lanzar NotFoundException si el incidente no existe', async () => {
-      mockIncidenteRepository.findOne.mockResolvedValue(null);
+    it('debería propagar la respuesta de error del CRM externo', async () => {
+      mockHttpService.get.mockReturnValue(
+        throwError(() => ({
+          response: {
+            status: 404,
+            data: { ok: false, message: 'Ticket no encontrado' },
+          },
+        })),
+      );
 
       await expect(service.obtenerEstado('no-existe')).rejects.toMatchObject({
         response: { ok: false, message: 'Ticket no encontrado' },
         status: 404,
       });
+    });
+
+    it('debería responder 502 si CRM externo no está disponible', async () => {
+      mockHttpService.get.mockReturnValue(throwError(() => new Error('network down')));
+
+      await expect(service.obtenerEstado('crm-caido')).rejects.toMatchObject({
+        response: { ok: false, message: 'No se pudo consultar el sistema externo' },
+        status: 502,
+      });
+    });
+  });
+
+  describe('sincronizarEstadosDesdeCrm', () => {
+    it('debería actualizar el incidente cuando el estado CRM difiere del local', async () => {
+      mockIncidenteRepository.find.mockResolvedValue([
+        { id: 'inc-1', sistemaId: 'P07', estado: IncidenteEstado.EN_PROGRESO },
+      ]);
+      mockHttpService.get.mockReturnValue(
+        of({ data: { ok: true, ticket: { estado: 'resuelto' } } }),
+      );
+      const cambiarEstadoSpy = jest
+        .spyOn(service, 'cambiarEstado')
+        .mockResolvedValue({} as any);
+
+      const result = await service.sincronizarEstadosDesdeCrm();
+
+      expect(mockIncidenteRepository.find).toHaveBeenCalled();
+      expect(cambiarEstadoSpy).toHaveBeenCalledWith('inc-1', {
+        estado: IncidenteEstado.CERRADO,
+        usuarioId: '00000000-0000-0000-0000-000000000001',
+      });
+      expect(result).toEqual({ revisados: 1, actualizados: 1 });
+    });
+
+    it('no debería actualizar cuando el estado CRM coincide con el local', async () => {
+      mockIncidenteRepository.find.mockResolvedValue([
+        { id: 'inc-2', sistemaId: 'P7', estado: IncidenteEstado.EN_PROGRESO },
+      ]);
+      mockHttpService.get.mockReturnValue(
+        of({ data: { ok: true, ticket: { estado: 'progreso' } } }),
+      );
+      const cambiarEstadoSpy = jest
+        .spyOn(service, 'cambiarEstado')
+        .mockResolvedValue({} as any);
+
+      const result = await service.sincronizarEstadosDesdeCrm();
+
+      expect(cambiarEstadoSpy).not.toHaveBeenCalled();
+      expect(result).toEqual({ revisados: 1, actualizados: 0 });
+    });
+
+    it('no debería romper el lote si un incidente falla en CRM', async () => {
+      mockIncidenteRepository.find.mockResolvedValue([
+        { id: 'inc-ok', sistemaId: 'P07', estado: IncidenteEstado.ABIERTO },
+        { id: 'inc-fail', sistemaId: 'P07', estado: IncidenteEstado.ABIERTO },
+      ]);
+      mockHttpService.get
+        .mockReturnValueOnce(of({ data: { ok: true, ticket: { estado: 'cerrado' } } }))
+        .mockReturnValueOnce(throwError(() => new Error('network down')));
+      const cambiarEstadoSpy = jest
+        .spyOn(service, 'cambiarEstado')
+        .mockResolvedValue({} as any);
+
+      const result = await service.sincronizarEstadosDesdeCrm();
+
+      expect(cambiarEstadoSpy).toHaveBeenCalledTimes(1);
+      expect(cambiarEstadoSpy).toHaveBeenCalledWith('inc-ok', {
+        estado: IncidenteEstado.CERRADO,
+        usuarioId: '00000000-0000-0000-0000-000000000001',
+      });
+      expect(result).toEqual({ revisados: 2, actualizados: 1 });
     });
   });
 
