@@ -98,8 +98,17 @@ export class WorkerService {
     await queryRunner.startTransaction();
 
     let incidenteCreadoParaBroadcast: Incidente | null = null;
+    let incidenteCerradoParaBroadcast: string | null = null;
 
     try {
+      // Bloqueo pesimista sobre el sistema para evitar condición de carrera (Race Condition)
+      // Si dos workers reciben alertas del mismo sistema al mismo tiempo, el segundo esperará aquí
+      // hasta que el primero termine (commit/rollback).
+      await queryRunner.manager.getRepository(Sistema).findOne({
+        where: { sistemaId: dto.sistema_id },
+        lock: { mode: 'pessimistic_write' }
+      });
+
       const incidenteRepo = queryRunner.manager.getRepository(Incidente);
 
       const incidenteActivo = await incidenteRepo.findOne({
@@ -137,7 +146,7 @@ export class WorkerService {
             ]
           );
           
-          this.eventsGateway.emitEstadoActualizado(incidenteId, IncidenteEstado.CERRADO);
+          incidenteCerradoParaBroadcast = incidenteId;
           
           this.logger.log(`Incidente ${incidenteId} CERRADO automáticamente por evento de resolución.`);
         }
@@ -214,6 +223,10 @@ export class WorkerService {
 
       if (incidenteCreadoParaBroadcast) {
         this.eventsGateway.emitNuevoIncidente(incidenteCreadoParaBroadcast);
+      }
+      
+      if (incidenteCerradoParaBroadcast) {
+        this.eventsGateway.emitEstadoActualizado(incidenteCerradoParaBroadcast, IncidenteEstado.CERRADO);
       }
 
       this.logger.log(

@@ -1,4 +1,4 @@
-import { IsEnum, IsInt, IsISO8601, IsOptional, IsString, IsUUID, Min } from 'class-validator';
+import { IsEnum, IsInt, IsISO8601, IsOptional, IsString, IsUUID, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 import { IncidenteEstado, IGetIncidentesDto } from '@proyecto/shared-types';
 import { ApiPropertyOptional } from '@nestjs/swagger';
@@ -26,6 +26,7 @@ export class GetIncidentesDto implements IGetIncidentesDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(100)
   limit?: number = 10;
 
   @ApiPropertyOptional({
