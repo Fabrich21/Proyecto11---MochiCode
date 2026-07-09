@@ -24,6 +24,9 @@ import { EventoAlerta } from '../database/entities/evento-alerta.entity';
 
 @Injectable()
 export class IncidentesService {
+  /** Máximo de consultas simultáneas al CRM durante la sincronización de estados. */
+  private static readonly CONCURRENCIA_SYNC_CRM = 10;
+
   private readonly logger = new Logger(IncidentesService.name);
   private readonly p9AnaliticaUrl: string;
   private readonly p7CrmEstadoUrl: string;
@@ -190,52 +193,101 @@ export class IncidentesService {
       },
     });
 
-    let actualizados = 0;
+    // Se procesan las consultas al CRM en paralelo con un límite de concurrencia
+    // para evitar el problema N+1 (peticiones HTTP secuenciales) sin saturar el
+    // sistema externo con cientos de peticiones simultáneas.
+    const resultados = await this.ejecutarConLimiteConcurrencia(
+      incidentesActivos,
+      IncidentesService.CONCURRENCIA_SYNC_CRM,
+      (incidente) => this.sincronizarIncidenteDesdeCrm(incidente),
+    );
 
-    for (const incidente of incidentesActivos) {
-      try {
-        const idTicketCrm = await this.resolverIdTicketCrm(incidente.id);
-
-        if (!idTicketCrm) {
-          this.logger.warn(
-            `No se encontró el id del ticket CRM para el incidente ${incidente.id}; se omite.`,
-          );
-          continue;
-        }
-
-        const respuesta: any = await this.obtenerEstado(idTicketCrm);
-        const estadoCrm = respuesta?.ticket?.estado;
-        const nuevoEstado = this.mapearEstadoCrmAIncidente(estadoCrm);
-
-        if (!nuevoEstado) {
-          this.logger.warn(
-            `Estado CRM desconocido ("${estadoCrm}") para incidente ${incidente.id}; se omite.`,
-          );
-          continue;
-        }
-
-        if (nuevoEstado === incidente.estado) {
-          continue;
-        }
-
-        await this.cambiarEstado(incidente.id, {
-          estado: nuevoEstado,
-          usuarioId: this.sistemaAutomaticoUuid,
-        });
-
-        actualizados += 1;
-        this.logger.log(
-          `Incidente ${incidente.id} sincronizado desde CRM (ticket ${idTicketCrm}): ${incidente.estado} → ${nuevoEstado}.`,
-        );
-      } catch (error) {
-        this.logger.error(
-          `No se pudo sincronizar el estado del incidente ${incidente.id} desde CRM`,
-          error,
-        );
-      }
-    }
+    const actualizados = resultados.reduce(
+      (total, resultado) =>
+        resultado.status === 'fulfilled' && resultado.value ? total + 1 : total,
+      0,
+    );
 
     return { revisados: incidentesActivos.length, actualizados };
+  }
+
+  /**
+   * Sincroniza un único incidente contra el CRM externo.
+   * Devuelve `true` si el estado local cambió, `false` en caso contrario.
+   */
+  private async sincronizarIncidenteDesdeCrm(incidente: Incidente): Promise<boolean> {
+    const idTicketCrm = await this.resolverIdTicketCrm(incidente.id);
+
+    if (!idTicketCrm) {
+      this.logger.warn(
+        `No se encontró el id del ticket CRM para el incidente ${incidente.id}; se omite.`,
+      );
+      return false;
+    }
+
+    const respuesta: any = await this.obtenerEstado(idTicketCrm);
+    const estadoCrm = respuesta?.ticket?.estado;
+    const nuevoEstado = this.mapearEstadoCrmAIncidente(estadoCrm);
+
+    if (!nuevoEstado) {
+      this.logger.warn(
+        `Estado CRM desconocido ("${estadoCrm}") para incidente ${incidente.id}; se omite.`,
+      );
+      return false;
+    }
+
+    if (nuevoEstado === incidente.estado) {
+      return false;
+    }
+
+    await this.cambiarEstado(incidente.id, {
+      estado: nuevoEstado,
+      usuarioId: this.sistemaAutomaticoUuid,
+    });
+
+    this.logger.log(
+      `Incidente ${incidente.id} sincronizado desde CRM (ticket ${idTicketCrm}): ${incidente.estado} → ${nuevoEstado}.`,
+    );
+
+    return true;
+  }
+
+  /**
+   * Ejecuta una tarea asíncrona sobre una colección respetando un límite máximo de
+   * operaciones en curso, devolviendo el resultado de cada una vía `Promise.allSettled`.
+   * Los errores individuales se registran y no interrumpen al resto del lote.
+   */
+  private async ejecutarConLimiteConcurrencia<T, R>(
+    elementos: readonly T[],
+    limite: number,
+    tarea: (elemento: T) => Promise<R>,
+  ): Promise<PromiseSettledResult<R>[]> {
+    const resultados: PromiseSettledResult<R>[] = new Array(elementos.length);
+    const concurrencia = Math.max(1, Math.min(limite, elementos.length));
+    let siguiente = 0;
+
+    const worker = async (): Promise<void> => {
+      while (true) {
+        const indice = siguiente++;
+        if (indice >= elementos.length) {
+          return;
+        }
+
+        try {
+          resultados[indice] = { status: 'fulfilled', value: await tarea(elementos[indice]) };
+        } catch (error) {
+          this.logger.error(
+            `Error al procesar el elemento ${indice} en tarea concurrente`,
+            error,
+          );
+          resultados[indice] = { status: 'rejected', reason: error };
+        }
+      }
+    };
+
+    await Promise.allSettled(Array.from({ length: concurrencia }, () => worker()));
+
+    return resultados;
   }
 
   /**
