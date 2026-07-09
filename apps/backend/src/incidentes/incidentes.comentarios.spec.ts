@@ -1,23 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { IncidentesService } from './incidentes.service';
+import { ComentariosService } from './comentarios.service';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { Repository } from 'typeorm';
 import { Incidente } from '../database/entities/incidente.entity';
-import { HistorialEstado } from '../database/entities/historial-estado.entity';
 import { Comentario } from '../database/entities/comentario.entity';
 import { Auditoria } from '../database/entities/auditoria.entity';
-import { PoliticaSla } from '../database/entities/politica-sla.entity';
-import { Sistema } from '../database/entities/sistema.entity';
 import { EventsGateway } from '../events/events.gateway';
-import { HttpService } from '@nestjs/axios';
-import { ConfigService } from '@nestjs/config';
-import { P6NotificacionesService } from '../p6-notificaciones/p6-notificaciones.service';
 import { NotFoundException } from '@nestjs/common';
-import { EventoAlerta } from '../database/entities/evento-alerta.entity';
-import { PlaybooksService } from './playbooks.service';
 
-describe('IncidentesService - Comentarios', () => {
-  let service: IncidentesService;
+describe('ComentariosService', () => {
+  let service: ComentariosService;
   let comentarioRepository: jest.Mocked<Repository<Comentario>>;
   let incidenteRepository: jest.Mocked<Repository<Incidente>>;
   let auditoriaRepository: jest.Mocked<Repository<Auditoria>>;
@@ -30,14 +22,10 @@ describe('IncidentesService - Comentarios', () => {
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        IncidentesService,
+        ComentariosService,
         {
           provide: getRepositoryToken(Incidente),
           useValue: { findOne: jest.fn() },
-        },
-        {
-          provide: getRepositoryToken(HistorialEstado),
-          useValue: { save: jest.fn() },
         },
         {
           provide: getRepositoryToken(Comentario),
@@ -54,48 +42,16 @@ describe('IncidentesService - Comentarios', () => {
           useValue: { save: jest.fn() },
         },
         {
-          provide: getRepositoryToken(PoliticaSla),
-          useValue: { findOne: jest.fn() },
-        },
-        {
-          provide: getRepositoryToken(Sistema),
-          useValue: { findOne: jest.fn() },
-        },
-        {
-          provide: getRepositoryToken(EventoAlerta),
-          useValue: { findOne: jest.fn() },
-        },
-        {
-          provide: DataSource,
-          useValue: { createQueryRunner: jest.fn() },
-        },
-        {
           provide: EventsGateway,
           useValue: {
             emitNuevoComentario: jest.fn(),
             emitComentarioEliminado: jest.fn(),
           },
         },
-        {
-          provide: HttpService,
-          useValue: { post: jest.fn() },
-        },
-        {
-          provide: P6NotificacionesService,
-          useValue: { enviarEmailAsignacionTicket: jest.fn() },
-        },
-        {
-          provide: ConfigService,
-          useValue: { get: jest.fn() },
-        },
-        {
-          provide: PlaybooksService,
-          useValue: { obtenerPlaybookParaIncidente: jest.fn().mockReturnValue(['Paso 1']) },
-        },
       ],
     }).compile();
 
-    service = module.get<IncidentesService>(IncidentesService);
+    service = module.get<ComentariosService>(ComentariosService);
     comentarioRepository = module.get(getRepositoryToken(Comentario));
     incidenteRepository = module.get(getRepositoryToken(Incidente));
     auditoriaRepository = module.get(getRepositoryToken(Auditoria));
