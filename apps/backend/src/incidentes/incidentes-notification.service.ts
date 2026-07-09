@@ -23,7 +23,7 @@ export class IncidentesNotificationService {
   ) {
     this.p9AnaliticaUrl = this.configService.get<string>(
       'P9_ANALITICA_URL',
-      'http://p9-analitica/v1/events',
+      'https://analisis-proyecto-ti.onrender.com/v1/events',
     )!;
   }
 
